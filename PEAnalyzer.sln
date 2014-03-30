@@ -1,0 +1,54 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 11.00
+# Visual Studio 2010
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PEAnalyzer", "PEAnalyzer\PEAnalyzer.csproj", "{4C971FBB-DCBB-4401-B757-7F798D10F376}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Bunseki", "plugins\bunseki\Bunseki\Bunseki.csproj", "{AF903833-3F53-42BC-ADA1-797D9709EA3C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BeaEngineCS", "plugins\bunseki\plugins\beaengine-cs\BeaEngineCS\BeaEngineCS.csproj", "{C8241D75-0AA1-419D-A423-175FB36E4E34}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Distorm3cs", "plugins\bunseki\plugins\distorm3cs\Distorm3cs\Distorm3cs.csproj", "{27C84C77-6F54-481F-8598-639AC768753D}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{4C971FBB-DCBB-4401-B757-7F798D10F376}.Debug|x64.ActiveCfg = Debug|x86
+		{4C971FBB-DCBB-4401-B757-7F798D10F376}.Debug|x86.ActiveCfg = Debug|x86
+		{4C971FBB-DCBB-4401-B757-7F798D10F376}.Debug|x86.Build.0 = Debug|x86
+		{4C971FBB-DCBB-4401-B757-7F798D10F376}.Release|x64.ActiveCfg = Release|x86
+		{4C971FBB-DCBB-4401-B757-7F798D10F376}.Release|x86.ActiveCfg = Release|x86
+		{4C971FBB-DCBB-4401-B757-7F798D10F376}.Release|x86.Build.0 = Release|x86
+		{AF903833-3F53-42BC-ADA1-797D9709EA3C}.Debug|x64.ActiveCfg = Debug|x64
+		{AF903833-3F53-42BC-ADA1-797D9709EA3C}.Debug|x64.Build.0 = Debug|x64
+		{AF903833-3F53-42BC-ADA1-797D9709EA3C}.Debug|x86.ActiveCfg = Debug|x86
+		{AF903833-3F53-42BC-ADA1-797D9709EA3C}.Debug|x86.Build.0 = Debug|x86
+		{AF903833-3F53-42BC-ADA1-797D9709EA3C}.Release|x64.ActiveCfg = Release|x64
+		{AF903833-3F53-42BC-ADA1-797D9709EA3C}.Release|x64.Build.0 = Release|x64
+		{AF903833-3F53-42BC-ADA1-797D9709EA3C}.Release|x86.ActiveCfg = Release|x86
+		{AF903833-3F53-42BC-ADA1-797D9709EA3C}.Release|x86.Build.0 = Release|x86
+		{C8241D75-0AA1-419D-A423-175FB36E4E34}.Debug|x64.ActiveCfg = Debug|x64
+		{C8241D75-0AA1-419D-A423-175FB36E4E34}.Debug|x64.Build.0 = Debug|x64
+		{C8241D75-0AA1-419D-A423-175FB36E4E34}.Debug|x86.ActiveCfg = Debug|x86
+		{C8241D75-0AA1-419D-A423-175FB36E4E34}.Debug|x86.Build.0 = Debug|x86
+		{C8241D75-0AA1-419D-A423-175FB36E4E34}.Release|x64.ActiveCfg = Release|x64
+		{C8241D75-0AA1-419D-A423-175FB36E4E34}.Release|x64.Build.0 = Release|x64
+		{C8241D75-0AA1-419D-A423-175FB36E4E34}.Release|x86.ActiveCfg = Release|x86
+		{C8241D75-0AA1-419D-A423-175FB36E4E34}.Release|x86.Build.0 = Release|x86
+		{27C84C77-6F54-481F-8598-639AC768753D}.Debug|x64.ActiveCfg = Debug|x64
+		{27C84C77-6F54-481F-8598-639AC768753D}.Debug|x64.Build.0 = Debug|x64
+		{27C84C77-6F54-481F-8598-639AC768753D}.Debug|x86.ActiveCfg = Debug|x86
+		{27C84C77-6F54-481F-8598-639AC768753D}.Debug|x86.Build.0 = Debug|x86
+		{27C84C77-6F54-481F-8598-639AC768753D}.Release|x64.ActiveCfg = Release|x64
+		{27C84C77-6F54-481F-8598-639AC768753D}.Release|x64.Build.0 = Release|x64
+		{27C84C77-6F54-481F-8598-639AC768753D}.Release|x86.ActiveCfg = Release|x86
+		{27C84C77-6F54-481F-8598-639AC768753D}.Release|x86.Build.0 = Release|x86
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

@@ -1,0 +1,14 @@
+*
+!.gitignore
+!*.cs
+!*.csproj
+!*.resx
+!*.settings
+!*.sln
+!*.vcxproj
+!PEAnalyzer
+!PEAnalyzer/Properties
+!plugins
+!plugins/bunseki
+!LICENSE
+!README.md
