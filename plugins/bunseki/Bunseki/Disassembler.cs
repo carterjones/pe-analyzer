@@ -65,7 +65,7 @@
         /// <returns>the list of instruction represented by the supplied byte array</returns>
         public IEnumerable<Instruction> DisassembleInstructions(byte[] data)
         {
-            return this.DisassembleInstructions(data, UIntPtr.Zero);
+            return this.DisassembleInstructions(data, 0);
         }
 
         /// <summary>
@@ -74,7 +74,7 @@
         /// <param name="data">the byte array to be disassembled</param>
         /// <param name="virtualAddress">the virtual address of the first byte to be disassembled</param>
         /// <returns>the disassembled instructions</returns>
-        public IEnumerable<Instruction> DisassembleInstructions(byte[] data, UIntPtr virtualAddress)
+        public IEnumerable<Instruction> DisassembleInstructions(byte[] data, ulong virtualAddress)
         {
             if (this.Engine == InternalDisassembler.BeaEngine)
             {

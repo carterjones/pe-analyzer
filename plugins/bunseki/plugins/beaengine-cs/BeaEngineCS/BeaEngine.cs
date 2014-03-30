@@ -253,6 +253,21 @@
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, EntryPoint = "Disasm")]
         public static extern int Disassemble(ref _Disasm instruction);
 
+        public static IEnumerable<_Disasm> Disassemble(byte[] data, long address, Architecture architecture)
+        {
+            return BeaEngine.Disassemble(data, new UIntPtr((ulong)address), architecture);
+        }
+
+        public static IEnumerable<_Disasm> Disassemble(byte[] data, ulong address, Architecture architecture)
+        {
+            return BeaEngine.Disassemble(data, new UIntPtr(address), architecture);
+        }
+
+        public static IEnumerable<_Disasm> Disassemble(byte[] data, IntPtr address, Architecture architecture)
+        {
+            return BeaEngine.Disassemble(data, new UIntPtr((ulong)address.ToInt64()), architecture);
+        }
+
         public static IEnumerable<_Disasm> Disassemble(byte[] data, UIntPtr address, Architecture architecture)
         {
             GCHandle h = GCHandle.Alloc(data, GCHandleType.Pinned);

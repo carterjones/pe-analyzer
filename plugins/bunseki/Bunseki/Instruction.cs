@@ -31,10 +31,10 @@
         {
             try
             {
-                this.Address = (IntPtr)inst.VirtualAddr;
+                this.Address = inst.VirtualAddr;
                 this.Mnemonic = inst.Instruction.Mnemonic;
                 this.stringRepresentation = inst.CompleteInstr;
-                this.BranchTarget = new UIntPtr(inst.Instruction.AddrValue);
+                this.BranchTarget = inst.Instruction.AddrValue;
                 this.FlowType = Instruction.GetFlowControl(this.Mnemonic);
                 this.NumBytes = (uint)inst.Length;
                 this.Arg1 = new InstructionArgument(inst.Argument1);
@@ -62,7 +62,7 @@
         /// <param name="inst">the Distorm instruction</param>
         internal Instruction(Distorm3cs.Distorm.DInst inst)
         {
-            this.Address = (IntPtr)inst.addr;
+            this.Address = inst.addr;
             this.Mnemonic = inst.InstructionType.ToString().ToLower();
 
             throw new NotImplementedException();
@@ -142,7 +142,7 @@
         /// <summary>
         /// Gets or sets the instruction of the instruction.
         /// </summary>
-        public IntPtr Address { get; set; }
+        public ulong Address { get; set; }
 
         /// <summary>
         /// Gets a string representation of the instruction.
@@ -160,7 +160,7 @@
         /// <summary>
         /// Gets the target of the instruction if it branches elsewhere.
         /// </summary>
-        public UIntPtr BranchTarget { get; private set; }
+        public ulong BranchTarget { get; private set; }
 
         /// <summary>
         /// Gets the type of control flow for this instruction.
@@ -214,10 +214,10 @@
         public static Instruction CreateInvalidInstruction()
         {
             Instruction inst = new Instruction();
-            inst.Address = IntPtr.Subtract(IntPtr.Zero, 1);
+            inst.Address = ulong.MaxValue;
             inst.Mnemonic = "invalid";
             inst.stringRepresentation = "invalid instruction";
-            inst.BranchTarget = UIntPtr.Zero;
+            inst.BranchTarget = 0;
             inst.FlowType = ControlFlow.None;
             inst.NumBytes = 0;
             inst.Arg1 = new InstructionArgument();
@@ -231,18 +231,10 @@
         /// </summary>
         /// <param name="address">the address of the invalid instruction</param>
         /// <returns>an invalid instruction</returns>
-        public static Instruction CreateInvalidInstruction(IntPtr address)
+        public static Instruction CreateInvalidInstruction(ulong address)
         {
-            Instruction inst = new Instruction();
+            Instruction inst = Instruction.CreateInvalidInstruction();
             inst.Address = address;
-            inst.Mnemonic = "invalid";
-            inst.stringRepresentation = "invalid instruction";
-            inst.BranchTarget = UIntPtr.Zero;
-            inst.FlowType = ControlFlow.None;
-            inst.NumBytes = 0;
-            inst.Arg1 = new InstructionArgument();
-            inst.Arg2 = new InstructionArgument();
-            inst.Arg3 = new InstructionArgument();
             return inst;
         }
 
