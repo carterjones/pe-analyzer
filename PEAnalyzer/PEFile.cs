@@ -1003,18 +1003,43 @@
             return codeChunks;
         }
 
-        // Add basic blocks based on control flow transitions.
-        private IEnumerable<BasicBlock> ExtractBasicBlocksFromInstructions(List<Instruction> instructions)
+        private BasicBlock GetBasicBlockOrCreateNewBasicBlock(HashSet<BasicBlock> basicBlocks, ulong address)
         {
-            BasicBlock bb = new BasicBlock();
+            // Create a new basic block.
+            BasicBlock bb = new BasicBlock(address);
 
-            // Make a basic block for the first instruction.
+            // Add it to the set of basic blocks.
+            if (!basicBlocks.Add(bb))
+            {
+                // If it already existed, then return the pre-existing basic block.
+                return basicBlocks.First(x => x.FirstInstructionAddress == bb.FirstInstructionAddress);
+            }
+            else
+            {
+                // If it did not already exist, return the newly created basic block.
+                return bb;
+            }
+        }
+
+        // Add basic blocks based on control flow transitions.
+        private void AddBasicBlocksFromInstructions(HashSet<BasicBlock> basicBlocks, List<Instruction> instructions)
+        {
+            // Start the first basic block.
+            BasicBlock bb = null;
+            BasicBlock previousBasicBlock = null;
+
+            // Set the first basic block to start with the first instruction in the instruction list.
             if (instructions.Count > 0)
             {
-                bb.FirstInstructionAddress = instructions.First().Address;
-                yield return bb;
+                bb = this.GetBasicBlockOrCreateNewBasicBlock(basicBlocks, instructions.First().Address);
+            }
+            else
+            {
+                return;
             }
 
+            // Iterate through the instructions, adding to the current basic block and making new basic blocks as
+            // necessary.
             bool lastInstructionWasConditionalBranch = false;
             foreach (Instruction i in instructions)
             {
@@ -1024,22 +1049,36 @@
                     // Reset the flag.
                     lastInstructionWasConditionalBranch = false;
 
-                    // Add the basic block.
-                    bb = new BasicBlock();
-                    bb.FirstInstructionAddress = i.Address;
-                    yield return bb;
+                    // Get the next basic block or create a new basic block.
+                    previousBasicBlock = bb;
+                    bb = this.GetBasicBlockOrCreateNewBasicBlock(basicBlocks, i.Address);
+
+                    // Link the previous and current basic blocks.
+                    previousBasicBlock.NextBasicBlocks.Add(bb);
+                    bb.PreviousBasicBlocks.Add(previousBasicBlock);
                 }
 
                 if (i.FlowType == Instruction.ControlFlow.Call ||
                     i.FlowType == Instruction.ControlFlow.ConditionalBranch ||
                     i.FlowType == Instruction.ControlFlow.UnconditionalBranch)
                 {
-                    // Add the branch target as the start of a basic block if the address is not zero.
+                    // Add a new basic block, based on the branch target, if it is not null. Start a new basic block.
                     if (i.BranchTarget != 0)
                     {
-                        bb = new BasicBlock();
-                        bb.FirstInstructionAddress = i.BranchTarget;
-                        yield return bb;
+                        BasicBlock branchBlock = this.GetBasicBlockOrCreateNewBasicBlock(basicBlocks, i.BranchTarget);
+
+                        if (i.FlowType == Instruction.ControlFlow.Call)
+                        {
+                            // Add the current instruction to the list of instructions that call the basic block
+                            // located at the branch target.
+                            branchBlock.CalledBy.Add(i);
+                        }
+                        else
+                        {
+                            // Link to the basic block located at the branch target.
+                            bb.NextBasicBlocks.Add(branchBlock);
+                            branchBlock.PreviousBasicBlocks.Add(bb);
+                        }
                     }
 
                     // Set a flag so that the next instruction has a basic block created for it.
@@ -1084,10 +1123,7 @@
                 {
                     // If the last instruction has some type of flow control, then it is likely that this code chunk
                     // was filled with valid code. Add all basic blocks from the disassembled list of instructions.
-                    foreach (BasicBlock bb in this.ExtractBasicBlocksFromInstructions(instructions))
-                    {
-                        basicBlocks.Add(bb);
-                    }
+                    this.AddBasicBlocksFromInstructions(basicBlocks, instructions);
                 }
             }
 
