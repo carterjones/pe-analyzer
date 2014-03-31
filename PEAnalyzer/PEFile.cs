@@ -24,6 +24,7 @@
         private byte[] rdata;
         private List<DiscoveredString> discoveredStrings = new List<DiscoveredString>();
         private List<DiscoveredReference> discoveredReferences = new List<DiscoveredReference>();
+        private ulong functionByteAlignment;
 
         #endregion
 
@@ -868,10 +869,13 @@
 
             public byte[] Code { get; private set; }
 
-            public CodeChunk(ulong offset, ulong length)
+            public bool EndsOnAlignmentBoundary { get; private set; }
+
+            public CodeChunk(ulong offset, ulong length, bool endsOnAlignmentBoundary)
             {
                 this.Offset = offset;
                 this.Code = new byte[length];
+                this.EndsOnAlignmentBoundary = endsOnAlignmentBoundary;
             }
         }
 
@@ -885,7 +889,6 @@
             byte[] alignmentBytes = new byte[] { 0x90, 0xcc };
             ulong minimumByteSequenceLength = 1;
             HashSet<AlignmentByteSequence> alignmentSequences = new HashSet<AlignmentByteSequence>();
-            ulong functionByteAlignment = 0;
 
             for (ulong i = 0; i < (ulong)this.code.Length - minimumByteSequenceLength; ++i)
             {
@@ -951,32 +954,20 @@
                 // aligmnent boundary has been passed. 
                 if (percentDifference > 45.0)
                 {
-                    functionByteAlignment = thisPossibleAlignment;
+                    this.functionByteAlignment = thisPossibleAlignment;
                     break;
                 }
             }
 
             // If we were unable to determine the most likely byte alignment value, then use a standard Microsoft 16
             // byte aligment value.
-            if (functionByteAlignment == 0)
+            if (this.functionByteAlignment == 0)
             {
-                functionByteAlignment = 16;
+                this.functionByteAlignment = 16;
             }
 
             // Remove any aligment sequences that do not end on the aligment boundary.
-            alignmentSequences.RemoveWhere(x => x.NextInstructionOffset % functionByteAlignment != 0);
-
-            int counter = 0;
-            foreach (AlignmentByteSequence sequence in alignmentSequences)
-            {
-                if (counter++ > 5)
-                {
-                    break;
-                }
-
-                Console.WriteLine("next instruction: " + sequence.NextInstructionOffset.ToAddressString32());
-                Console.WriteLine("length:           " + sequence.Length);
-            }
+            alignmentSequences.RemoveWhere(x => x.NextInstructionOffset % this.functionByteAlignment != 0);
 
             return alignmentSequences;
         }
@@ -992,7 +983,14 @@
             {
                 // Copy the code to a code chunk.
                 ulong codeChunkLength = sequence.Offset - currentOffset;
-                CodeChunk cc = new CodeChunk(currentOffset, codeChunkLength);
+                bool endsOnAlignmentBoundary = ((currentOffset + codeChunkLength + 1) % this.functionByteAlignment) == 0;
+                if (endsOnAlignmentBoundary)
+                {
+                    Console.WriteLine();
+                }
+
+                // TODO: ***IMPORTANT*** merge with next code chunk if this one ends on an alignment boundary.
+                CodeChunk cc = new CodeChunk(currentOffset, codeChunkLength, endsOnAlignmentBoundary);
                 Array.Copy(this.code, (long)currentOffset, cc.Code, 0, (long)codeChunkLength);
                 codeChunks.Add(cc);
 
@@ -1003,26 +1001,25 @@
             return codeChunks;
         }
 
-        private BasicBlock GetBasicBlockOrCreateNewBasicBlock(HashSet<BasicBlock> basicBlocks, ulong address)
+        private BasicBlock GetBasicBlockOrCreateNewBasicBlock(Dictionary<ulong, BasicBlock> basicBlocks, ulong address)
         {
-            // Create a new basic block.
-            BasicBlock bb = new BasicBlock(address);
-
-            // Add it to the set of basic blocks.
-            if (!basicBlocks.Add(bb))
+            // See if the basic block already exists.
+            if (basicBlocks.ContainsKey(address))
             {
-                // If it already existed, then return the pre-existing basic block.
-                return basicBlocks.First(x => x.FirstInstructionAddress == bb.FirstInstructionAddress);
+                // If it already exists, then return it.
+                return basicBlocks[address];
             }
             else
             {
-                // If it did not already exist, return the newly created basic block.
+                // Otherwise, create a new basic block, add it, and return it.
+                BasicBlock bb = new BasicBlock(address);
+                basicBlocks[address] = bb;
                 return bb;
             }
         }
 
         // Add basic blocks based on control flow transitions.
-        private void AddBasicBlocksFromInstructions(HashSet<BasicBlock> basicBlocks, List<Instruction> instructions)
+        private void AddBasicBlocksFromInstructions(Dictionary<ulong, BasicBlock> basicBlocks, List<Instruction> instructions)
         {
             // Start the first basic block.
             BasicBlock bb = null;
@@ -1103,31 +1100,53 @@
             d.Engine = Disassembler.InternalDisassembler.BeaEngine;
             d.TargetArchitecture = Disassembler.Architecture.x86_32;
             List<Instruction> instructions = new List<Instruction>();
-            HashSet<BasicBlock> basicBlocks = new HashSet<BasicBlock>();
+            Dictionary<ulong, BasicBlock> basicBlocks = new Dictionary<ulong, BasicBlock>();
 
             // For each code chunk, disassemble it and find basic blocks.
             foreach (CodeChunk cc in codeChunks)
             {
                 ulong virtualAddressBase = this.ImageBase + this.BaseOfCodeInMemory + cc.Offset;
-                instructions = new List<Instruction>(d.DisassembleInstructions(cc.Code, virtualAddressBase));
+                List<Instruction> codeChunkInstructions = new List<Instruction>(d.DisassembleInstructions(cc.Code, virtualAddressBase));
 
                 // If no instructions were found or if the last instruction has no control flow, then it is likely
                 // that decoding failed and that this is actually a data chunk.
-                if (instructions.Count == 0 || instructions.Last().FlowType == Instruction.ControlFlow.None)
+                if (codeChunkInstructions.Count == 0 ||
+                    !cc.EndsOnAlignmentBoundary && (codeChunkInstructions.Last().FlowType == Instruction.ControlFlow.None))
                 {
                     // TODO: track data chunks.
-                    Console.WriteLine("This is a data chunk.");
                     continue;
                 }
                 else
                 {
+                    if (cc.EndsOnAlignmentBoundary && codeChunkInstructions.Last().FlowType == Instruction.ControlFlow.None)
+                    {
+                        Console.WriteLine();
+                    }
+
                     // If the last instruction has some type of flow control, then it is likely that this code chunk
                     // was filled with valid code. Add all basic blocks from the disassembled list of instructions.
-                    this.AddBasicBlocksFromInstructions(basicBlocks, instructions);
+                    this.AddBasicBlocksFromInstructions(basicBlocks, codeChunkInstructions);
+
+                    // Add instructions to the global list of instructions.
+                    instructions.AddRange(codeChunkInstructions);
                 }
             }
 
-            List<BasicBlock> sortedBasicBlocks = basicBlocks.OrderBy(x => x.FirstInstructionAddress).ToList();
+            // Iterate through all the verified valid instructions and add them to their respective basic blocks.
+            BasicBlock currentBasicBlock = null;
+            foreach (Instruction i in instructions)
+            {
+                if (basicBlocks.ContainsKey(i.Address))
+                {
+                    currentBasicBlock = basicBlocks[i.Address];
+                }
+
+                currentBasicBlock.Instructions.Add(i);
+            }
+
+            List<BasicBlock> sortedBasicBlocks = basicBlocks.Values.OrderBy(x => x.FirstInstructionAddress).ToList();
+
+            Console.WriteLine();
 
             /*
             // Search for address references in rdata.
@@ -1183,276 +1202,6 @@
                     }
                 }
             }
-
-            // TODO: see why some basic blocks occur outside of the premissible range of addresses.
-
-            // Get the last instruction found in the code section.
-            List<Instruction> sortedInstructions = instructions.OrderBy(x => x.Address).ToList();
-            Instruction firstInstruction = sortedInstructions.FirstOrDefault();
-            Instruction lastInstruction = sortedInstructions.LastOrDefault();
-            ulong firstPermissibleAddress = (ulong)firstInstruction.Address;
-            ulong lastPermissibleAddress = (ulong)lastInstruction.Address;
-
-            // Create a sorted list of basic blocks for iteration purposes. Only use basic blocks that are valid
-            // (occur at or after the first instruction and start before the last instruction).
-            List<BasicBlock> sortedBasicBlocks = basicBlocks
-                .Where(x => (x.FirstInstructionAddress < lastPermissibleAddress) &&
-                            (x.FirstInstructionAddress >= firstPermissibleAddress))
-                .OrderBy(x => x.FirstInstructionAddress)
-                .ToList();
-
-            // TODO: make sure all previous basic blocks are connected.
-            // TODO: make sure all next basic blocks are connected.
-            // x 1 - Make sure all basic blocks ending with conditional branch instructions have at least two next basic blocks.
-            // o 2 - Make sure all basic blocks ending with return instructions have no basic blocks. This should be automatic.
-            // o 3 - Make sure all basic blocks ending with unconditional branch instructions have only one next basic block.
-
-            // Add each instruction to the basic blocks.
-            int currentBasicBlockIndex = 0;
-            BasicBlock currentBasicBlock = new BasicBlock();
-            BasicBlock nextBasicBlock = new BasicBlock();
-            if (sortedBasicBlocks.Count > 0)
-            {
-                currentBasicBlock = sortedBasicBlocks[currentBasicBlockIndex];
-                Instruction instruction = Instruction.CreateInvalidInstruction();
-                for (int i = 0; i < sortedInstructions.Count; ++i)
-                {
-                    instruction = sortedInstructions[i];
-
-                    if (instruction.Address == 0x00428b07)
-                    {
-                        Console.WriteLine();
-                    }
-
-                    // If the instruction occurs before the current basic block, ignore it.
-                    if (instruction.Address < currentBasicBlock.FirstInstructionAddress)
-                    {
-                        continue;
-                    }
-
-                    // Check to see if another basic block exists.
-                    if (currentBasicBlockIndex + 1 < sortedBasicBlocks.Count)
-                    {
-                        nextBasicBlock = sortedBasicBlocks[currentBasicBlockIndex + 1];
-                        ulong nextBasicBlockAddress = nextBasicBlock.FirstInstructionAddress;
-
-                        // If the current instruction equals the address of the next basic block, then move to that block.
-                        if (nextBasicBlockAddress == instruction.Address)
-                        {
-                            currentBasicBlock = nextBasicBlock;
-                            currentBasicBlockIndex++;
-                        }
-                    }
-
-                    // Check to see if the basic block's instruction list is empty.
-                    if (currentBasicBlock.Instructions.Count == 0)
-                    {
-                        // If the current instruction equals the expected first instruction of the basic block,
-                        // then add the instruction.
-                        if (currentBasicBlock.FirstInstructionAddress == instruction.Address)
-                        {
-                            // Add the instruction to the basic block.
-                            currentBasicBlock.Instructions.Add(instruction);
-                        }
-                        else
-                        {
-                            // Check for decoding errors.
-                            ulong correctFirstInstructionAddress = currentBasicBlock.FirstInstructionAddress;
-                            ulong incorrectFirstInstructionAddress = instruction.Address;
-                            const ulong MAX_NUMBER_OF_BYTES_IN_X86_INSTRUCTION = 15;
-                            ulong addressDifference = incorrectFirstInstructionAddress - correctFirstInstructionAddress;
-
-                            // If the difference in addresses of the correct first instruction and incorrect
-                            // is less than the maximum number of bytes in an x86 instruction, then the error could be
-                            // caused by data within the code segment.
-                            if (addressDifference <= MAX_NUMBER_OF_BYTES_IN_X86_INSTRUCTION)
-                            {
-                                // Calculate the code offset.
-                                int correctOffset = (int)(correctFirstInstructionAddress - codeVirtualBaseAddress);
-
-                                // Copy a portion of the code into a temporary buffer.
-                                byte[] codeSubset = new byte[MAX_NUMBER_OF_BYTES_IN_X86_INSTRUCTION * 2];
-                                Array.Copy(code, correctOffset, codeSubset, 0, (int)MAX_NUMBER_OF_BYTES_IN_X86_INSTRUCTION * 2);
-
-                                // Re-disassemble the bytes to get a correct result.
-                                List<Instruction> reDisassembledInstructions = new List<Instruction>(
-                                    d.DisassembleInstructions(codeSubset, currentBasicBlock.FirstInstructionAddress));
-
-                                foreach (Instruction newInstruction in reDisassembledInstructions)
-                                {
-                                    ulong newInstructionAddress = newInstruction.Address;
-
-                                    if (newInstructionAddress < incorrectFirstInstructionAddress)
-                                    {
-                                        // If this instruction comes before the incorrect instruction, then add it.
-                                        currentBasicBlock.Instructions.Add(newInstruction);
-                                    }
-                                    else if (newInstructionAddress == incorrectFirstInstructionAddress)
-                                    {
-                                        // If this instruction occurs at the address of the incorrect instruction,
-                                        // add the newly disassembled version of the instruction and stop adding
-                                        // more instructions.
-                                        currentBasicBlock.Instructions.Add(newInstruction);
-                                        break;
-                                    }
-                                    else
-                                    {
-                                        throw new Exception("An unknown situation occured while redisassembling some code.");
-                                    }
-                                }
-                            }
-                            else
-                            {
-                                // See if a valid instruction does exist at this address.
-                                Instruction correctInstruction = Instruction.CreateInvalidInstruction();
-
-                                bool foundValidInstruction = false;
-
-                                // Find the correct instruction.
-                                while (!foundValidInstruction)
-                                {
-                                    correctInstruction = sortedInstructions.FirstOrDefault(x => x.Address == currentBasicBlock.FirstInstructionAddress);
-
-                                    if (correctInstruction == null)
-                                    {
-                                        // No instruction exists, so we assume the basic block has been invalidly created.
-                                        if (!basicBlocks.Remove(currentBasicBlock))
-                                        {
-                                            throw new Exception("Could not remove invalid basic block.");
-                                        }
-
-                                        if (currentBasicBlockIndex >= basicBlocks.Count)
-                                        {
-                                            throw new Exception("No more basic blocks exist.");
-                                        }
-
-                                        // Create a new sorted basic block list.
-                                        sortedBasicBlocks = basicBlocks.OrderBy(x => x.FirstInstructionAddress).ToList();
-
-                                        // Set a new current basic block.
-                                        currentBasicBlock = sortedBasicBlocks[currentBasicBlockIndex];
-
-                                        correctInstruction = sortedInstructions.FirstOrDefault(x => (ulong)x.Address == currentBasicBlock.FirstInstructionAddress);
-                                        if (correctInstruction == null)
-                                        {
-                                            continue;
-                                        }
-                                        else
-                                        {
-                                            foundValidInstruction = true;
-                                        }
-                                    }
-                                    else
-                                    {
-                                        // TODO: Handle this error.
-                                        Console.WriteLine("current basic block: 0x" + new IntPtr((long)currentBasicBlock.FirstInstructionAddress).ToString("x"));
-                                        Console.WriteLine("current instruction: " + instruction.AddressAsString);
-                                        Console.WriteLine();
-
-                                        continue;
-                                    }
-                                }
-
-                                // See if previous basic blocks used this instruction and remove the instruction,
-                                // as well as any subsequent instructions, from that basic block.
-                                IEnumerable<BasicBlock> basicBlocksWithCorrectInstruction =
-                                    sortedBasicBlocks.Where(x => x.Instructions.Contains(correctInstruction));
-                                if (basicBlocksWithCorrectInstruction.Count() > 1)
-                                {
-                                    throw new Exception("TODO: handle the case where more than one basic block has the correct instruction.");
-                                }
-
-                                // Only keep the instructions belonging to each basic block containing the
-                                // correct instruction.
-                                foreach (BasicBlock bbToBeCorrected in basicBlocksWithCorrectInstruction)
-                                {
-                                    int indexOfCorrectInstruction = bbToBeCorrected.Instructions.IndexOf(correctInstruction);
-                                    List<Instruction> correctInstructions = bbToBeCorrected.Instructions.Take(indexOfCorrectInstruction).ToList();
-                                    bbToBeCorrected.Instructions.Clear();
-                                    bbToBeCorrected.Instructions.AddRange(correctInstructions);
-                                }
-
-                                // Add the correct instruction to the current basic block.
-                                currentBasicBlock.Instructions.Add(correctInstruction);
-                            }
-                        }
-                    }
-                    else
-                    {
-                        // Add the next basic block.
-                        currentBasicBlock.Instructions.Add(instruction);
-                    }
-
-                    if ((ulong)currentBasicBlock.Instructions.FirstOrDefault().Address != currentBasicBlock.FirstInstructionAddress)
-                    {
-                        Console.WriteLine();
-                    }
-
-                    // If the instruction is a control flow changing instruction, move to the next basic block.
-                    // Do not count call instructions as a flow changing instruction.
-                    if (instruction.FlowType == Instruction.ControlFlow.ConditionalBranch ||
-                        instruction.FlowType == Instruction.ControlFlow.UnconditionalBranch ||
-                        instruction.FlowType == Instruction.ControlFlow.Return)
-                    {
-                        // Check to see if another basic block exists.
-                        if (currentBasicBlockIndex + 1 >= sortedBasicBlocks.Count)
-                        {
-                            // Exit the loop if no more basic blocks remain.
-                            break;
-                        }
-
-                        nextBasicBlock = sortedBasicBlocks[currentBasicBlockIndex + 1];
-
-                        // Link to the fall-through basic block, for when the conditional branch is false.
-                        if (instruction.FlowType == Instruction.ControlFlow.ConditionalBranch)
-                        {
-                            currentBasicBlock.NextBasicBlocks.Add(nextBasicBlock);
-                            nextBasicBlock.PreviousBasicBlocks.Add(currentBasicBlock);
-                        }
-
-                        // Move to the next basic block.
-                        currentBasicBlock = nextBasicBlock;
-                        currentBasicBlockIndex++;
-                    }
-                }
-            }
-
-            basicBlocks = new HashSet<BasicBlock>(sortedBasicBlocks);
-
-            Instruction testInst = instructions.FirstOrDefault(x => x.Address == 0x004c50b2);
-            BasicBlock test = basicBlocks.FirstOrDefault(x => x.FirstInstructionAddress == 0x004c50b2);
-
-            // Link all basic blocks that change control flow because of a conditional or unconditional branch.
-            BasicBlock branchTargetBlock = new BasicBlock();
-            foreach (BasicBlock block in basicBlocks)
-            {
-                lastInstruction = block.Instructions.LastOrDefault();
-
-                if (lastInstruction.FlowType == Instruction.ControlFlow.ConditionalBranch ||
-                    lastInstruction.FlowType == Instruction.ControlFlow.UnconditionalBranch)
-                {
-                    // Find the matching basic block that this basic block can branch to.
-                    branchTargetBlock = basicBlocks.FirstOrDefault(x => x.FirstInstructionAddress.Equals(lastInstruction.BranchTarget));
-
-                    if (branchTargetBlock != null)
-                    {
-                        // Link it with this basic block.
-                        block.NextBasicBlocks.Add(branchTargetBlock);
-                        branchTargetBlock.PreviousBasicBlocks.Add(block);
-                    }
-                    else
-                    {
-                        // Cannot link a non-deterministic branch.
-                    }
-                }
-            }
-
-            // Basic block processing is complete at this point.
-
-            BasicBlock lastBasicBlock = sortedBasicBlocks.LastOrDefault();
-            List<ulong> endAddresses = sortedBasicBlocks.Skip(1).Select(x => x.FirstInstructionAddress).ToList();
-
-            Console.WriteLine();
             */
         }
 
