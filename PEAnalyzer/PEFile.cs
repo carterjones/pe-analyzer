@@ -22,56 +22,12 @@
         private byte[] code;
         private byte[] idata;
         private byte[] rdata;
-        private List<DiscoveredString> discoveredStrings = new List<DiscoveredString>();
-        private List<DiscoveredReference> discoveredReferences = new List<DiscoveredReference>();
         private ulong functionByteAlignment;
+        byte[] alignmentBytes = new byte[] { 0x90, 0xcc };
 
         #endregion
 
         #region Structures
-
-        public struct DiscoveredString
-        {
-            public byte[] RawBytes;
-            public ulong Address;
-            public Encoding Encoding;
-
-            public string StringFormat
-            {
-                get
-                {
-                    if (this.RawBytes == null || this.Address == 0 || this.Encoding == null)
-                    {
-                        return string.Empty;
-                    }
-
-                    return this.Encoding.GetString(this.RawBytes, 0, this.RawBytes.Length);
-                }
-            }
-        }
-
-        public struct DiscoveredReference
-        {
-            public byte[] RawBytes;
-            public ulong Address;
-            public ulong ReferencedAddress
-            {
-                get
-                {
-                    ulong address = 0;
-                    if (this.RawBytes.Length == 4)
-                    {
-                        address += BitConverter.ToUInt32(this.RawBytes, 0);
-                    }
-                    else
-                    {
-                        address += BitConverter.ToUInt64(this.RawBytes, 0);
-                    }
-
-                    return address;
-                }
-            }
-        }
 
         [StructLayout(LayoutKind.Sequential)]
         public struct IMAGE_DOS_HEADER
@@ -842,43 +798,6 @@
 
         #region Methods
 
-        private class AlignmentByteSequence
-        {
-            public AlignmentByteSequence(ulong offset, ulong length)
-            {
-                this.Offset = offset;
-                this.Length = length;
-            }
-
-            public ulong Offset { get; private set; }
-
-            public ulong Length { get; private set; }
-
-            public ulong NextInstructionOffset
-            {
-                get
-                {
-                    return this.Offset + this.Length;
-                }
-            }
-        }
-
-        private class CodeChunk
-        {
-            public ulong Offset { get; private set; }
-
-            public byte[] Code { get; private set; }
-
-            public bool EndsOnAlignmentBoundary { get; private set; }
-
-            public CodeChunk(ulong offset, ulong length, bool endsOnAlignmentBoundary)
-            {
-                this.Offset = offset;
-                this.Code = new byte[length];
-                this.EndsOnAlignmentBoundary = endsOnAlignmentBoundary;
-            }
-        }
-
         private HashSet<AlignmentByteSequence> CalculateByteAlignmentSequences()
         {
             if (this.code == null)
@@ -886,7 +805,6 @@
                 return new HashSet<AlignmentByteSequence>();
             }
 
-            byte[] alignmentBytes = new byte[] { 0x90, 0xcc };
             ulong minimumByteSequenceLength = 1;
             HashSet<AlignmentByteSequence> alignmentSequences = new HashSet<AlignmentByteSequence>();
 
@@ -897,7 +815,7 @@
                 // Scan the next 4 bytes;
                 for (ulong j = 0; j < minimumByteSequenceLength; ++j)
                 {
-                    if (!alignmentBytes.Contains(this.code[i + j]))
+                    if (!this.alignmentBytes.Contains(this.code[i + j]))
                     {
                         alignmentByteSequenceFound = false;
                         break;
@@ -915,7 +833,7 @@
                 // See how long the alignment byte sequence is.
                 for (ulong j = 0; j < (ulong)this.code.Length - minimumByteSequenceLength; ++j, ++alignmentByteSequenceLength)
                 {
-                    if (!alignmentBytes.Contains(this.code[i + j]))
+                    if (!this.alignmentBytes.Contains(this.code[i + j]))
                     {
                         break;
                     }
@@ -929,7 +847,7 @@
             }
 
             // See if there are aligment bytes at the end of the code segment.
-            int numEndingAlignmentBytes = this.code.Reverse().TakeWhile(x => alignmentBytes.Contains(x) || x == 0).Count();
+            int numEndingAlignmentBytes = this.code.Reverse().TakeWhile(x => this.alignmentBytes.Contains(x) || x == 0).Count();
 
             // If padding exists at the end, then add that as the final sequence.
             AlignmentByteSequence finalSequence = new AlignmentByteSequence((ulong)(this.code.Length - numEndingAlignmentBytes), (ulong)numEndingAlignmentBytes);
@@ -984,12 +902,7 @@
                 // Copy the code to a code chunk.
                 ulong codeChunkLength = sequence.Offset - currentOffset;
                 bool endsOnAlignmentBoundary = ((currentOffset + codeChunkLength + 1) % this.functionByteAlignment) == 0;
-                if (endsOnAlignmentBoundary)
-                {
-                    Console.WriteLine();
-                }
 
-                // TODO: ***IMPORTANT*** merge with next code chunk if this one ends on an alignment boundary.
                 CodeChunk cc = new CodeChunk(currentOffset, codeChunkLength, endsOnAlignmentBoundary);
                 Array.Copy(this.code, (long)currentOffset, cc.Code, 0, (long)codeChunkLength);
                 codeChunks.Add(cc);
@@ -1087,13 +1000,34 @@
             }
         }
 
-        public void FindBasicBlocks()
+        private CodeChunk MergeCodeChunks(CodeChunk cc1, CodeChunk cc2)
+        {
+            // Find out which code chunk comes first and which comes second.
+            CodeChunk first = cc1.Offset < cc2.Offset ? cc1 : cc2;
+            CodeChunk second = cc1.Offset < cc2.Offset ? cc2 : cc1;
+
+            // Create new code chunk that will hold the code from both chunks.
+            ulong startByteAddress = first.Offset;
+            ulong stopByteAddress = second.Offset + (ulong)second.Code.Length;
+            ulong newCodeLength = stopByteAddress - startByteAddress;
+            CodeChunk merged = new CodeChunk(first.Offset, newCodeLength, second.EndsOnAlignmentBoundary);
+
+            // Copy from the code segment, so that no bytes are missed between the code chunks.
+            Array.Copy(this.code, (long)first.Offset, merged.Code, 0, (long)newCodeLength);
+
+            // Copy the code from the second chunk.
+            Array.Copy(second.Code, 0, merged.Code, first.Code.Length + 1, second.Code.Length);
+
+            return merged;
+        }
+
+        public List<BasicBlock> FindBasicBlocks()
         {
             // Get the aligment byte sequences, so that aligment bytes are not interpreted as code.
             HashSet<AlignmentByteSequence> alignmentSequences = this.CalculateByteAlignmentSequences();
 
             // Get the chunks of code, based off of the aligment sequences.
-            HashSet<CodeChunk> codeChunks = this.GetCodeChunks(alignmentSequences);
+            List<CodeChunk> codeChunks = this.GetCodeChunks(alignmentSequences).OrderBy(x => x.Offset).ToList();
 
             // Initialize the disassembler and tracking variables.
             Disassembler d = new Disassembler();
@@ -1101,35 +1035,147 @@
             d.TargetArchitecture = Disassembler.Architecture.x86_32;
             List<Instruction> instructions = new List<Instruction>();
             Dictionary<ulong, BasicBlock> basicBlocks = new Dictionary<ulong, BasicBlock>();
+            CodeChunk codeChunkToMerge = null;
+            HashSet<DataChunk> dataChunks = new HashSet<DataChunk>();
 
             // For each code chunk, disassemble it and find basic blocks.
-            foreach (CodeChunk cc in codeChunks)
+            CodeChunk cc = null;
+            for (int i = 0; i < codeChunks.Count; ++i)
             {
-                ulong virtualAddressBase = this.ImageBase + this.BaseOfCodeInMemory + cc.Offset;
-                List<Instruction> codeChunkInstructions = new List<Instruction>(d.DisassembleInstructions(cc.Code, virtualAddressBase));
+                cc = codeChunks[i];
 
-                // If no instructions were found or if the last instruction has no control flow, then it is likely
-                // that decoding failed and that this is actually a data chunk.
-                if (codeChunkInstructions.Count == 0 ||
-                    !cc.EndsOnAlignmentBoundary && (codeChunkInstructions.Last().FlowType == Instruction.ControlFlow.None))
+                // Calculate the virtual address base of this code chunk.
+                ulong virtualAddressBase = this.ImageBase + this.BaseOfCodeInMemory + cc.Offset;
+
+                // Look for address references that occur within the first 100 bytes (or less if there aren't 100
+                // bytes in this code chunk) of this code chunk. If a significant amount are found, then this is
+                // likely a data chunk.
+                int addressSize = this.is32BitHeader ? 4 : 8;
+                int maxNumAddressesToTest = 5;
+                int maxNumBytesToTest = addressSize * maxNumAddressesToTest;
+                int numBytesToTestForReferences = cc.Code.Length >= maxNumBytesToTest ? maxNumBytesToTest : cc.Code.Length;
+                byte[] bytesToTestForReferences = new byte[numBytesToTestForReferences];
+                Array.Copy(cc.Code, bytesToTestForReferences, numBytesToTestForReferences);
+                HashSet<DiscoveredReference> references =
+                    this.GetAddressReferencesFromRawData(bytesToTestForReferences, virtualAddressBase);
+
+                if (references.Count > maxNumAddressesToTest / 2)
                 {
-                    // TODO: track data chunks.
+                    // Add the current data chunk to the set of data chunks.
+                    dataChunks.Add(new DataChunk(cc));
+
+                    // Cancel any pending staged merges.
+                    codeChunkToMerge = null;
+
+                    // Move to the next code chunk.
                     continue;
                 }
-                else
+
+                // Merge the previous code chunk, if it has been marked for merging.
+                if (codeChunkToMerge != null)
                 {
-                    if (cc.EndsOnAlignmentBoundary && codeChunkInstructions.Last().FlowType == Instruction.ControlFlow.None)
+                    // Retain a reference to the current code chunk, so it can be removed.
+                    CodeChunk ccToRemove = cc;
+
+                    // Merge the code chunks.
+                    CodeChunk mergedCodeChunk = this.MergeCodeChunks(codeChunkToMerge, cc);
+
+                    // Verify that these two chunks are contiguous.
+                    ulong firstChunkEndOffset = codeChunkToMerge.Offset + (ulong)codeChunkToMerge.Code.Length;
+                    if (firstChunkEndOffset != cc.Offset)
                     {
-                        Console.WriteLine();
+                        // See if all the bytes in the gap are alignment bytes.
+                        byte[] gapBytes = new byte[cc.Offset - firstChunkEndOffset];
+                        Array.Copy(this.code, (long)firstChunkEndOffset, gapBytes, 0, gapBytes.Length);
+                        bool allGapBytesAreAlignmentBytes = gapBytes.Where(x => !this.alignmentBytes.Contains(x)).Count() == 0;
+
+                        // Handle the case when the two code chunks are not contiguous, but not separated by only
+                        // alignment bytes.
+                        if (!allGapBytesAreAlignmentBytes)
+                        {
+                            // If they are possibly not contiguous, try disassembling the combined chunk to see if a
+                            // disassembling error may have caused the chunks to be marked as non-contigous.
+                            ulong codeChunkVirtualAddress = this.ImageBase + this.BaseOfCodeInMemory + mergedCodeChunk.Offset;
+                            List<Instruction> alignmentBoundaryInstructions = new List<Instruction>(
+                                d.DisassembleInstructions(mergedCodeChunk.Code, this.ImageBase + this.BaseOfCodeInMemory + mergedCodeChunk.Offset));
+
+                            // Look for an instruction that crosses the alignment boundary.
+                            bool instructionCrossesAlignmentBoundary = false;
+                            bool instructionTouchesAlignmentBoundary = false;
+                            foreach (Instruction instruction in alignmentBoundaryInstructions)
+                            {
+                                ulong secondChunkVirtualAddress = cc.Offset + this.ImageBase + this.BaseOfCodeInMemory;
+
+                                if (instruction.Address < secondChunkVirtualAddress &&
+                                    instruction.Address + instruction.NumBytes > secondChunkVirtualAddress)
+                                {
+                                    instructionCrossesAlignmentBoundary = true;
+                                    break;
+                                }
+                                else if (instruction.Address < secondChunkVirtualAddress &&
+                                    instruction.Address + instruction.NumBytes == secondChunkVirtualAddress)
+                                {
+                                    instructionTouchesAlignmentBoundary = true;
+                                    break;
+                                }
+                            }
+
+                            if (!instructionCrossesAlignmentBoundary && !instructionTouchesAlignmentBoundary)
+                            {
+                                // Print debugging information.
+                                ulong firstOffset = codeChunkToMerge.Offset;
+                                ulong expectedSecondOffset = (codeChunkToMerge.Offset + (ulong)codeChunkToMerge.Code.Length + 1);
+                                ulong actualSecondOffset = cc.Offset;
+                                Console.WriteLine("first offset:           " + firstOffset.ToAddressString64() + " (" + (firstOffset + this.ImageBase + this.BaseOfCodeInMemory).ToAddressString64() + ")");
+                                Console.WriteLine("expected second offset: " + expectedSecondOffset.ToAddressString64() + " (" + (expectedSecondOffset + this.ImageBase + this.BaseOfCodeInMemory).ToAddressString64() + ")");
+                                Console.WriteLine("actual second offset:   " + actualSecondOffset.ToAddressString64() + " (" + (actualSecondOffset + this.ImageBase + this.BaseOfCodeInMemory).ToAddressString64() + ")");
+                                throw new Exception("Code code chunks to be merged are not contiguous, and not separated by only nop instructions.");
+                            }
+                        }
                     }
 
-                    // If the last instruction has some type of flow control, then it is likely that this code chunk
-                    // was filled with valid code. Add all basic blocks from the disassembled list of instructions.
-                    this.AddBasicBlocksFromInstructions(basicBlocks, codeChunkInstructions);
+                    // Set current chunk to the merged block.
+                    cc = mergedCodeChunk;
 
-                    // Add instructions to the global list of instructions.
-                    instructions.AddRange(codeChunkInstructions);
+                    // Remove the code chunk that was merged into the previous code chunk.
+                    codeChunks.Remove(ccToRemove);
+
+                    // Move the code chunk index back to account for the code chunk removal.
+                    i--;
+
+                    // Adjust the virtual base address.
+                    virtualAddressBase = this.ImageBase + this.BaseOfCodeInMemory + cc.Offset;
+
+                    // Unstage the code chunk for merging.
+                    codeChunkToMerge = null;
                 }
+
+                List<Instruction> codeChunkInstructions = new List<Instruction>(d.DisassembleInstructions(cc.Code, virtualAddressBase));
+
+                // TODO: check for references after the last control flow instruction of a basic block.
+                // Determining the last valid control flow instruction will be the difficult part. Perhaps, check in
+                // reverse from the last byte toward the first byte, looking for how many references occur after each
+                // control flow instruction. If the amount sharply drops, it is likely that valid instructions have
+                // been found and that the data section has been exited.
+
+                if (cc.EndsOnAlignmentBoundary && codeChunkInstructions.Last().FlowType == Instruction.ControlFlow.None)
+                {
+                    if (codeChunkToMerge != null)
+                    {
+                        throw new Exception("A code chunk has not been properly merged.");
+                    }
+
+                    // Stage this code chunk for merging.
+                    codeChunkToMerge = cc;
+                    continue;
+                }
+
+                // If the last instruction has some type of flow control, then it is likely that this code chunk
+                // was filled with valid code. Add all basic blocks from the disassembled list of instructions.
+                this.AddBasicBlocksFromInstructions(basicBlocks, codeChunkInstructions);
+
+                // Add instructions to the global list of instructions.
+                instructions.AddRange(codeChunkInstructions);
             }
 
             // Iterate through all the verified valid instructions and add them to their respective basic blocks.
@@ -1146,63 +1192,41 @@
 
             List<BasicBlock> sortedBasicBlocks = basicBlocks.Values.OrderBy(x => x.FirstInstructionAddress).ToList();
 
-            Console.WriteLine();
+            return new List<BasicBlock>();
+        }
 
-            /*
-            // Search for address references in rdata.
-            IMAGE_SECTION_HEADER rdataSectionHeader = this.sectionHeaders.FirstOrDefault(x => x.Section.StartsWith(".rdata"));
+        private HashSet<DiscoveredReference> GetAddressReferencesFromRawData(byte[] data, ulong dataVirtualBaseAddress)
+        {
             int addressSize = this.is32BitHeader ? 4 : 8;
             byte[] addressBytes = new byte[addressSize];
-            HashSet<uint> instructionAddressesAsUInt = new HashSet<uint>(instructions.Select(x => (uint)x.Address));
-            HashSet<ulong> instructionAddressesAsULong = new HashSet<ulong>(instructions.Select(x => x.Address));
-            for (int i = 0; i < this.rdata.Length - addressSize; ++i)
+            ulong firstPossibleAddress = this.ImageBase + this.BaseOfCodeInMemory;
+            ulong lastPossibleAddress = firstPossibleAddress + (ulong)this.code.Length - (ulong)addressSize;
+            HashSet<DiscoveredReference> discoveredReferences = new HashSet<DiscoveredReference>();
+
+            for (int i = 0; i < data.Length - addressSize; ++i)
             {
-                // Convert the byte aray to an address.
-                Array.Copy(this.rdata, i, addressBytes, 0, addressSize);
-                if (this.is32BitHeader)
+                // Copy a byte array to see if it is an address.
+                Array.Copy(data, i, addressBytes, 0, addressSize);
+
+                // Convert the byte array to an address.
+                ulong referencedAddress = this.is32BitHeader ? BitConverter.ToUInt32(addressBytes, 0) : BitConverter.ToUInt64(addressBytes, 0);
+
+                // Check to see if the referenced address exists within the code address range.
+                if (referencedAddress >= firstPossibleAddress &&
+                    referencedAddress <= lastPossibleAddress)
                 {
-                    uint address32 = BitConverter.ToUInt32(addressBytes, 0);
+                    // Add the reference if it matches one of the instructions.
+                    ulong address = dataVirtualBaseAddress + (ulong)i;
+                    DiscoveredReference dr = new DiscoveredReference(address, addressSize);
+                    Array.Copy(addressBytes, dr.ReferencedAddressAsRawBytes, addressSize);
+                    discoveredReferences.Add(dr);
 
-                    // Check to see if the address exists in the list of disassembled instructions.
-                    // If it does exist,
-                    //   1 - add the reference to the list of discovered references.
-                    //   2 - use the address to create a new basic block if it does not exist.
-                    if (instructionAddressesAsUInt.Contains(address32))
-                    {
-                        DiscoveredReference dr = new DiscoveredReference();
-                        dr.Address = (ulong)(rdataSectionHeader.VirtualAddress + this.idata.Length + i);
-                        dr.RawBytes = new byte[addressSize];
-                        Array.Copy(addressBytes, dr.RawBytes, addressSize);
-                        this.discoveredReferences.Add(dr);
-
-                        bb = new BasicBlock();
-                        bb.FirstInstructionAddress = address32;
-                        basicBlocks.Add(bb);
-                    }
-                }
-                else
-                {
-                    ulong address64 = (ulong)BitConverter.ToInt64(addressBytes, 0);
-
-                    // Check to see if the address exists in the list of disassembled instructions.
-                    // If it does exist,
-                    //   1 - add the reference to the list of discovered references.
-                    //   2 - use the address to create a new basic block if it does not exist.
-                    if (instructionAddressesAsULong.Contains(address64))
-                    {
-                        DiscoveredReference dr = new DiscoveredReference();
-                        dr.Address = (ulong)(rdataSectionHeader.VirtualAddress + this.idata.Length + i);
-                        dr.RawBytes = new byte[addressSize];
-                        Array.Copy(addressBytes, dr.RawBytes, addressSize);
-                        this.discoveredReferences.Add(dr);
-
-                        bb = new BasicBlock();
-                        bb.FirstInstructionAddress = address64;
-                        basicBlocks.Add(bb);
-                    }
+                    // Increment the index by the address size - 1.
+                    i += addressSize - 1;
                 }
             }
-            */
+
+            return discoveredReferences;
         }
 
         private IEnumerator<BasicBlock> GetNextBasicBlock(IEnumerable<BasicBlock> basicBlocks)
@@ -1225,6 +1249,95 @@
             handle.Free();
 
             return theStructure;
+        }
+
+        #endregion
+
+        #region Classes
+
+        private class DiscoveredReference
+        {
+            public DiscoveredReference(ulong address, int addressSize)
+            {
+                this.Address = address;
+                this.ReferencedAddressAsRawBytes = new byte[addressSize];
+            }
+
+            public byte[] ReferencedAddressAsRawBytes { get; private set; }
+
+            public ulong Address { get; private set; }
+
+            public ulong ReferencedAddress
+            {
+                get
+                {
+                    ulong address = 0;
+                    if (this.ReferencedAddressAsRawBytes.Length == 4)
+                    {
+                        address += BitConverter.ToUInt32(this.ReferencedAddressAsRawBytes, 0);
+                    }
+                    else
+                    {
+                        address += BitConverter.ToUInt64(this.ReferencedAddressAsRawBytes, 0);
+                    }
+
+                    return address;
+                }
+            }
+        }
+
+        private class AlignmentByteSequence
+        {
+            public AlignmentByteSequence(ulong offset, ulong length)
+            {
+                this.Offset = offset;
+                this.Length = length;
+            }
+
+            public ulong Offset { get; private set; }
+
+            public ulong Length { get; private set; }
+
+            public ulong NextInstructionOffset
+            {
+                get
+                {
+                    return this.Offset + this.Length;
+                }
+            }
+        }
+
+        private class DataChunk : CodeChunk
+        {
+            public DataChunk(CodeChunk cc)
+            {
+                this.Offset = cc.Offset;
+                this.Code = cc.Code;
+                this.EndsOnAlignmentBoundary = cc.EndsOnAlignmentBoundary;
+            }
+        }
+
+        private class CodeChunk
+        {
+            public ulong Offset { get; protected set; }
+
+            public byte[] Code { get; protected set; }
+
+            public bool EndsOnAlignmentBoundary { get; protected set; }
+
+            public CodeChunk()
+            {
+                this.Offset = ulong.MaxValue;
+                this.Code = new byte[0];
+                this.EndsOnAlignmentBoundary = false;
+            }
+
+            public CodeChunk(ulong offset, ulong length, bool endsOnAlignmentBoundary)
+            {
+                this.Offset = offset;
+                this.Code = new byte[length];
+                this.EndsOnAlignmentBoundary = endsOnAlignmentBoundary;
+            }
         }
 
         #endregion
