@@ -10,16 +10,27 @@
     /// </summary>
     public class BasicBlock
     {
+        #region Fields
+
+        readonly ulong firstInstructionAddress;
+
+        readonly int hashCode;
+
+        #endregion
+
         #region Constructors
 
         /// <summary>
         /// Initializes a new instance of the BasicBlock class.
         /// </summary>
-        public BasicBlock()
+        public BasicBlock(ulong firstInstructionAddress)
         {
+            this.firstInstructionAddress = firstInstructionAddress;
+            this.hashCode = this.FirstInstructionAddress.GetHashCode();
             this.PreviousBasicBlocks = new HashSet<BasicBlock>();
             this.NextBasicBlocks = new HashSet<BasicBlock>();
             this.Instructions = new List<Instruction>();
+            this.CalledBy = new HashSet<Instruction>();
         }
 
         #endregion
@@ -37,9 +48,20 @@
         public HashSet<BasicBlock> NextBasicBlocks { get; private set; }
 
         /// <summary>
+        /// Gets a set of instructions that call this basic block.
+        /// </summary>
+        public HashSet<Instruction> CalledBy { get; private set; }
+
+        /// <summary>
         /// Gets or sets the address of the first instruction of this basic block.
         /// </summary>
-        public ulong FirstInstructionAddress { get; set; }
+        public ulong FirstInstructionAddress
+        {
+            get
+            {
+                return this.firstInstructionAddress;
+            }
+        }
 
         /// <summary>
         /// Gets the list of instructions within this basic block.
@@ -51,12 +73,12 @@
         #region Methods
 
         /// <summary>
-        /// Calculates and returns a hash code that uniquely identifies this basic block.
+        /// Returns a pre-computed hash code that uniquely identifies this basic block.
         /// </summary>
         /// <returns>a hash code that uniquely identifies this basic block</returns>
         public override int GetHashCode()
         {
-            return this.FirstInstructionAddress.GetHashCode();
+            return this.hashCode;
         }
 
         /// <summary>
