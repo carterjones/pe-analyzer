@@ -12,6 +12,7 @@
     {
         #region Fields
 
+        private const ulong MAX_NUMBER_OF_BYTES_IN_X86_INSTRUCTION = 15;
         private bool is32BitHeader;
         private IMAGE_DOS_HEADER dosHeader;
         private IMAGE_NT_HEADERS32 ntHeaders32;
@@ -711,6 +712,10 @@
             }
         }
 
+        public HashSet<BasicBlock> BasicBlocks { get; private set; }
+        public HashSet<DataChunk> DataChunks { get; private set; }
+        public HashSet<ulong> AddressesOfFunctionsThatEventuallyStopExecution { get; private set; }
+
         private uint NumberOfSections
         {
             get
@@ -732,6 +737,11 @@
 
         public PEFile(string filePath)
         {
+            // Initialize properties.
+            this.BasicBlocks = new HashSet<BasicBlock>();
+            this.DataChunks = new HashSet<DataChunk>();
+            this.AddressesOfFunctionsThatEventuallyStopExecution = new HashSet<ulong>();
+
             // Read in the PE File.
             using (FileStream fs = new FileStream(filePath, FileMode.Open, FileAccess.Read))
             {
@@ -1021,7 +1031,74 @@
             return merged;
         }
 
-        public List<BasicBlock> FindBasicBlocks()
+        private ulong? FindReferenceArray(byte[] data)
+        {
+            ulong addressSize = this.is32BitHeader ? (ulong)4 : (ulong)8;
+            int numReferencesConsideredSignificant = 2;
+            byte[] addressBytes = new byte[addressSize];
+            ulong minReference = this.ImageBase + this.BaseOfCodeInMemory;
+            ulong maxReference = minReference + (ulong)this.code.Length - addressSize;
+            int referenceCount = 0;
+            ulong? offsetOfFirstReferenceInArray = null;
+
+            // Check to see if the data is large enough to hold a reference. If not, return null.
+            if ((ulong)data.Length < addressSize)
+            {
+                return null;
+            }
+
+            // Search for address references.
+            for (ulong i = 0; i < (ulong)data.Length - addressSize; ++i)
+            {
+                // Convert current byte chunk to a reference.
+                Array.Copy(data, (long)i, addressBytes, 0, (long)addressSize);
+                ulong reference = this.is32BitHeader ? BitConverter.ToUInt32(addressBytes, 0) : BitConverter.ToUInt64(addressBytes, 0);
+
+                // See if the reference points to an address in the code segment.
+                if (reference >= minReference && reference <= maxReference)
+                {
+                    // Increase the reference count if a reference is found.
+                    referenceCount++;
+
+                    // If this is the first offset in a discovered array, then save the offset.
+                    if (offsetOfFirstReferenceInArray == null)
+                    {
+                        offsetOfFirstReferenceInArray = i;
+                    }
+
+                    // Increase the offset by the address size - 1, so the next reference will be read, if it exists.
+                    i += addressSize - 1;
+                }
+                else
+                {
+                    // Reset the reference count if no reference is found.
+                    referenceCount = 0;
+
+                    // Reset the index to the offset of the first refence found.
+                    i = offsetOfFirstReferenceInArray ?? i;
+
+                    // Reset the offset of first reference found.
+                    offsetOfFirstReferenceInArray = null;
+                }
+
+                // If a significant amount of references has been found, then return the offset of the first
+                // reference.
+                if (referenceCount == numReferencesConsideredSignificant)
+                {
+                    if (offsetOfFirstReferenceInArray == null)
+                    {
+                        throw new Exception("The first reference in the reference array has not been properly set.");
+                    }
+
+                    return offsetOfFirstReferenceInArray;
+                }
+            }
+
+            // If no reference was found, then return null.
+            return null;
+        }
+
+        public HashSet<BasicBlock> FindBasicBlocks()
         {
             // Get the aligment byte sequences, so that aligment bytes are not interpreted as code.
             HashSet<AlignmentByteSequence> alignmentSequences = this.CalculateByteAlignmentSequences();
@@ -1029,14 +1106,15 @@
             // Get the chunks of code, based off of the aligment sequences.
             List<CodeChunk> codeChunks = this.GetCodeChunks(alignmentSequences).OrderBy(x => x.Offset).ToList();
 
-            // Initialize the disassembler and tracking variables.
+            // Initialize the disassembler.
             Disassembler d = new Disassembler();
             d.Engine = Disassembler.InternalDisassembler.BeaEngine;
-            d.TargetArchitecture = Disassembler.Architecture.x86_32;
+            d.TargetArchitecture = this.is32BitHeader ? Disassembler.Architecture.x86_32 : Disassembler.Architecture.x86_64;
+
+            // Initialize tracking variables.
             List<Instruction> instructions = new List<Instruction>();
             Dictionary<ulong, BasicBlock> basicBlocks = new Dictionary<ulong, BasicBlock>();
             CodeChunk codeChunkToMerge = null;
-            HashSet<DataChunk> dataChunks = new HashSet<DataChunk>();
 
             // For each code chunk, disassemble it and find basic blocks.
             CodeChunk cc = null;
@@ -1047,22 +1125,13 @@
                 // Calculate the virtual address base of this code chunk.
                 ulong virtualAddressBase = this.ImageBase + this.BaseOfCodeInMemory + cc.Offset;
 
-                // Look for address references that occur within the first 100 bytes (or less if there aren't 100
-                // bytes in this code chunk) of this code chunk. If a significant amount are found, then this is
+                // Look for a reference array that starts within the first 20 bytes. If one is found, then this is
                 // likely a data chunk.
-                int addressSize = this.is32BitHeader ? 4 : 8;
-                int maxNumAddressesToTest = 5;
-                int maxNumBytesToTest = addressSize * maxNumAddressesToTest;
-                int numBytesToTestForReferences = cc.Code.Length >= maxNumBytesToTest ? maxNumBytesToTest : cc.Code.Length;
-                byte[] bytesToTestForReferences = new byte[numBytesToTestForReferences];
-                Array.Copy(cc.Code, bytesToTestForReferences, numBytesToTestForReferences);
-                HashSet<DiscoveredReference> references =
-                    this.GetAddressReferencesFromRawData(bytesToTestForReferences, virtualAddressBase);
-
-                if (references.Count > maxNumAddressesToTest / 2)
+                ulong? referenceArrayOffset = this.FindReferenceArray(cc.Code);
+                if (referenceArrayOffset != null && (ulong)referenceArrayOffset < 20)
                 {
                     // Add the current data chunk to the set of data chunks.
-                    dataChunks.Add(new DataChunk(cc));
+                    this.DataChunks.Add(new DataChunk(cc));
 
                     // Cancel any pending staged merges.
                     codeChunkToMerge = null;
@@ -1152,22 +1221,143 @@
 
                 List<Instruction> codeChunkInstructions = new List<Instruction>(d.DisassembleInstructions(cc.Code, virtualAddressBase));
 
-                // TODO: check for references after the last control flow instruction of a basic block.
-                // Determining the last valid control flow instruction will be the difficult part. Perhaps, check in
-                // reverse from the last byte toward the first byte, looking for how many references occur after each
-                // control flow instruction. If the amount sharply drops, it is likely that valid instructions have
-                // been found and that the data section has been exited.
-
-                if (cc.EndsOnAlignmentBoundary && codeChunkInstructions.Last().FlowType == Instruction.ControlFlow.None)
+                // See if the code exectuion will fall through after executing the final instruction.
+                Instruction lastInstruction = codeChunkInstructions.Last();
+                if (this.IsFallThroughInstruction(lastInstruction))
                 {
-                    if (codeChunkToMerge != null)
+                    if (cc.EndsOnAlignmentBoundary)
                     {
-                        throw new Exception("A code chunk has not been properly merged.");
-                    }
+                        if (codeChunkToMerge != null)
+                        {
+                            throw new Exception("A code chunk has not been properly merged.");
+                        }
 
-                    // Stage this code chunk for merging.
-                    codeChunkToMerge = cc;
-                    continue;
+                        // Stage this code chunk for merging.
+                        codeChunkToMerge = cc;
+                        continue;
+                    }
+                    else
+                    {
+                        // Scan for a reference array in this code chunk. If one is found, assume that it will not
+                        // contain code, so do not include instructions that occur at or after it. Also, unstage any
+                        // code chunks that have been staged for merging.
+                        ulong? offsetOfData = this.FindReferenceArray(cc.Code);
+                        if (offsetOfData != null)
+                        {
+                            ulong virtualAddressOfData =
+                                (ulong)offsetOfData + cc.Offset + this.ImageBase + this.BaseOfCodeInMemory;
+                            Instruction instBeforeCodeArray = codeChunkInstructions
+                                .FirstOrDefault(x => x.Address < virtualAddressOfData &&
+                                                     x.Address + x.NumBytes >= virtualAddressOfData);
+                            Instruction lastInstructionToKeep = instBeforeCodeArray;
+
+                            // If this not a control flow instruction, it is most likely padding, so ignore it.
+                            if (instBeforeCodeArray.FlowType == Instruction.ControlFlow.None)
+                            {
+                                lastInstructionToKeep =
+                                    codeChunkInstructions.ElementAt(codeChunkInstructions.IndexOf(instBeforeCodeArray) - 1);
+                            }
+                            else
+                            {
+                                // If the instruction does not cross into the data chunk, then it is a valid
+                                // instruction, so include it in the list of instructions.
+                                if (instBeforeCodeArray.Address + instBeforeCodeArray.NumBytes <= virtualAddressOfData)
+                                {
+                                    lastInstructionToKeep = instBeforeCodeArray;
+                                }
+                                else
+                                {
+                                    // If the instruction is a control flow instruction does not fall through, it is
+                                    // likely a valid instruction that could be also converted into a reference to a
+                                    // valid address. In this case, keep it. Otherwise, discard it.
+                                    if (instBeforeCodeArray.FlowType == Instruction.ControlFlow.Return ||
+                                        instBeforeCodeArray.FlowType == Instruction.ControlFlow.UnconditionalBranch)
+                                    {
+                                        lastInstructionToKeep = instBeforeCodeArray;
+                                    }
+                                    else
+                                    {
+                                        lastInstructionToKeep =
+                                            codeChunkInstructions.ElementAt(codeChunkInstructions.IndexOf(instBeforeCodeArray) - 1);
+                                    }
+                                }
+                            }
+
+                            // Remove all instructions after the last instruction to keep.
+                            codeChunkInstructions = codeChunkInstructions
+                                .Where(x => x.Address <= lastInstructionToKeep.Address)
+                                .ToList();
+
+                            // Make a data chunk and add it to the list of data chunks.
+                            ulong dataLength = (ulong)cc.Code.Length - (ulong)offsetOfData;
+                            DataChunk dc = new DataChunk(cc.Offset + (ulong)offsetOfData, dataLength, false);
+                            this.DataChunks.Add(dc);
+
+                            // Unstage code chunk for merging, since this is a data chunk.
+                            codeChunkToMerge = null;
+                        }
+                        else
+                        {
+                            // See if the bytes following the last instruction can be disassembled into at least one
+                            // instruction. If the first instruction of the disassembled instruction list crosses the
+                            // byte boundary, then mark the code chunk for merging.
+                            ulong possibleInstructionAddress = lastInstruction.Address + lastInstruction.NumBytes;
+                            byte[] possibleInstructionBytes = new byte[PEFile.MAX_NUMBER_OF_BYTES_IN_X86_INSTRUCTION];
+
+                            // Calculate the offset of the possible instruction for the current code chunk.
+                            ulong possibleInstructionCodeChunkOffset =
+                                possibleInstructionAddress - codeChunkInstructions.First().Address;
+
+                            // Calculate the offset of the data for the entire code segment of the PE file.
+                            ulong possibleInstructionCodeOffset = possibleInstructionCodeChunkOffset + cc.Offset;
+
+                            // Copy the bytes from the code segment to the possible instruction bytes array.
+                            Array.Copy(
+                                this.code,
+                                (long)possibleInstructionCodeOffset,
+                                possibleInstructionBytes,
+                                0,
+                                possibleInstructionBytes.Length);
+
+                            // Disassemble the possible boundary-crossing instruction (and any instructions that
+                            // follow it).
+                            List<Instruction> possibleInstructionList =
+                                d.DisassembleInstructions(possibleInstructionBytes, possibleInstructionAddress)
+                                .ToList();
+
+                            // Calculate how many bytes were not disassembled.
+                            ulong bytesRemainingInCodeChunk = (ulong)cc.Code.Length - possibleInstructionCodeChunkOffset;
+
+                            // Calculate the address of the next byte alignment boundary.
+                            ulong byteAlignmentBoudaryAddress =
+                                (ulong)cc.Code.Length + cc.Offset + this.BaseOfCodeInMemory + this.ImageBase;
+                            while (byteAlignmentBoudaryAddress % this.functionByteAlignment != 0)
+                            {
+                                byteAlignmentBoudaryAddress++;
+                            }
+
+                            // Determine if the first instruction crosses the byte alignment boundary.
+                            if (possibleInstructionList.Count > 0 &&
+                                possibleInstructionList[0].NumBytes + possibleInstructionList[0].Address > byteAlignmentBoudaryAddress)
+                            {
+                                // Stage this code chunk for merging.
+                                codeChunkToMerge = cc;
+                                continue;
+                            }
+                            else
+                            {
+                                // Add this to the list of functions that stop execution.
+                                if (lastInstruction.FlowType == Instruction.ControlFlow.Call)
+                                {
+                                    this.AddressesOfFunctionsThatEventuallyStopExecution.Add(lastInstruction.BranchTarget);
+                                }
+                                else
+                                {
+                                    throw new Exception("Expected an instruction to cross the byte boundary, but it did not.");
+                                }
+                            }
+                        }
+                    }
                 }
 
                 // If the last instruction has some type of flow control, then it is likely that this code chunk
@@ -1190,9 +1380,23 @@
                 currentBasicBlock.Instructions.Add(i);
             }
 
-            List<BasicBlock> sortedBasicBlocks = basicBlocks.Values.OrderBy(x => x.FirstInstructionAddress).ToList();
+            // Order the basic blocks for simpler debugging purposes.
+            this.BasicBlocks = new HashSet<BasicBlock>(basicBlocks.Values.OrderBy(x => x.FirstInstructionAddress));
 
-            return new List<BasicBlock>();
+            // Return the discovered basic blocks.
+            return this.BasicBlocks;
+        }
+
+        /// <summary>
+        /// Determine if the instruction allows code execution to continue to the instruction immidiately following
+        /// the instruction.
+        /// </summary>
+        /// <param name="i">the instruction to test</param>
+        /// <returns>true if the instruction does not have a flow type of return or unconditional branch</returns>
+        private bool IsFallThroughInstruction(Instruction i)
+        {
+            return !(i.FlowType == Instruction.ControlFlow.Return ||
+                     i.FlowType == Instruction.ControlFlow.UnconditionalBranch);
         }
 
         private HashSet<DiscoveredReference> GetAddressReferencesFromRawData(byte[] data, ulong dataVirtualBaseAddress)
@@ -1307,7 +1511,7 @@
             }
         }
 
-        private class DataChunk : CodeChunk
+        public class DataChunk : CodeChunk
         {
             public DataChunk(CodeChunk cc)
             {
@@ -1315,9 +1519,16 @@
                 this.Code = cc.Code;
                 this.EndsOnAlignmentBoundary = cc.EndsOnAlignmentBoundary;
             }
+
+            public DataChunk(ulong offset, ulong length, bool endsOnAlignmentBoundary)
+            {
+                this.Offset = offset;
+                this.Code = new byte[length];
+                this.EndsOnAlignmentBoundary = endsOnAlignmentBoundary;
+            }
         }
 
-        private class CodeChunk
+        public class CodeChunk
         {
             public ulong Offset { get; protected set; }
 
