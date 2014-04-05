@@ -4,6 +4,7 @@
 !*.csproj
 !*.resx
 !*.settings
+!*.StyleCop
 !*.sln
 !*.vcxproj
 !PEAnalyzer
