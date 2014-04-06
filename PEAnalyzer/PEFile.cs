@@ -691,7 +691,7 @@
         {
             get
             {
-                return this.is32BitHeader ? this.optionalHeader32.BaseOfCode : this.optionalHeader64.BaseOfCode;
+                return this.sectionHeaders.FirstOrDefault(x => x.Section.StartsWith(".text")).PointerToRawData;
             }
         }
 
