@@ -82,7 +82,7 @@
         public PEFile(string filePath)
         {
             // Initialize properties.
-            this.BasicBlocks = new HashSet<BasicBlock>();
+            this.BasicBlocks = new Dictionary<ulong, BasicBlock>();
             this.DataChunks = new HashSet<DataChunk>();
             this.AddressesOfFunctionsThatEventuallyStopExecution = new HashSet<ulong>();
 
@@ -523,7 +523,7 @@
         /// <summary>
         /// Gets a collection of basic blocks in the PE file.
         /// </summary>
-        public HashSet<BasicBlock> BasicBlocks { get; private set; }
+        public Dictionary<ulong, BasicBlock> BasicBlocks { get; private set; }
 
         /// <summary>
         /// Gets a collection of data chunks in the PE file, which do not contain any code.
@@ -579,7 +579,7 @@
         /// Searches for basic blocks in the code segment of this PE file.
         /// </summary>
         /// <returns>a collection of basic blocks that exist in the code segment of this PE file</returns>
-        public HashSet<BasicBlock> FindBasicBlocks()
+        public Dictionary<ulong, BasicBlock> FindBasicBlocks()
         {
             // Get the aligment byte sequences, so that aligment bytes are not interpreted as code.
             HashSet<AlignmentByteSequence> alignmentSequences = this.CalculateByteAlignmentSequences();
@@ -861,8 +861,8 @@
                 currentBasicBlock.Instructions.Add(i);
             }
 
-            // Order the basic blocks for simpler debugging purposes.
-            this.BasicBlocks = new HashSet<BasicBlock>(basicBlocks.Values.OrderBy(x => x.FirstInstructionAddress));
+            // Set the global basic block collection equal to the local collection.
+            this.BasicBlocks = basicBlocks;
 
             // Return the discovered basic blocks.
             return this.BasicBlocks;
