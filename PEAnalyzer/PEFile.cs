@@ -1662,18 +1662,35 @@
             public bool EndsOnAlignmentBoundary { get; protected set; }
         }
 
+        /// <summary>
+        /// Represents a sequence of bytes that resides directly before and up to an alignment boundary.
+        /// </summary>
         private class AlignmentByteSequence
         {
+            /// <summary>
+            /// Initializes a new instance of the AlignmentByteSequence class.
+            /// </summary>
+            /// <param name="offset">the sequence's offset from the base of the code segment</param>
+            /// <param name="length">the number of bytes in the byte sequence</param>
             public AlignmentByteSequence(ulong offset, ulong length)
             {
                 this.Offset = offset;
                 this.Length = length;
             }
 
+            /// <summary>
+            /// Gets the sequence's offset from the base of the code segment.
+            /// </summary>
             public ulong Offset { get; private set; }
 
+            /// <summary>
+            /// Gets the number of bytes in the byte sequence.
+            /// </summary>
             public ulong Length { get; private set; }
 
+            /// <summary>
+            /// Gets the offset (from the base of the code segment) of the instruction that follows the byte sequence.
+            /// </summary>
             public ulong NextInstructionOffset
             {
                 get
