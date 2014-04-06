@@ -708,6 +708,26 @@
         }
 
         /// <summary>
+        /// Reads in a block from a binary stream and converts it to the struct type specified by the template
+        /// parameter.
+        /// </summary>
+        /// <typeparam name="T">the type of structure being read</typeparam>
+        /// <param name="reader">a binary reader that places the data into a struct of type T</param>
+        /// <returns>a new object composed of bytes read by the reader into the supplied type of object</returns>
+        private static T ReadToStruct<T>(BinaryReader reader)
+        {
+            // Read in a byte array.
+            byte[] bytes = reader.ReadBytes(Marshal.SizeOf(typeof(T)));
+
+            // Pin the managed memory while, copy it out the data, and then unpin it.
+            GCHandle handle = GCHandle.Alloc(bytes, GCHandleType.Pinned);
+            T theStructure = (T)Marshal.PtrToStructure(handle.AddrOfPinnedObject(), typeof(T));
+            handle.Free();
+
+            return theStructure;
+        }
+
+        /// <summary>
         /// Calculates the byte alignment sequences of the code section.
         /// </summary>
         /// <returns>a set of byte alignment sequences that contain no code or data</returns>
@@ -1081,26 +1101,6 @@
             }
 
             return discoveredReferences;
-        }
-
-        /// <summary>
-        /// Reads in a block from a binary stream and converts it to the struct type specified by the template
-        /// parameter.
-        /// </summary>
-        /// <typeparam name="T">the type of structure being read</typeparam>
-        /// <param name="reader">a binary reader that places the data into a struct of type T</param>
-        /// <returns>a new object composed of bytes read by the reader into the supplied type of object</returns>
-        private static T ReadToStruct<T>(BinaryReader reader)
-        {
-            // Read in a byte array.
-            byte[] bytes = reader.ReadBytes(Marshal.SizeOf(typeof(T)));
-
-            // Pin the managed memory while, copy it out the data, and then unpin it.
-            GCHandle handle = GCHandle.Alloc(bytes, GCHandleType.Pinned);
-            T theStructure = (T)Marshal.PtrToStructure(handle.AddrOfPinnedObject(), typeof(T));
-            handle.Free();
-
-            return theStructure;
         }
 
         #endregion
