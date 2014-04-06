@@ -667,14 +667,7 @@
         {
             get
             {
-                if (this.is32BitHeader)
-                {
-                    return optionalHeader32.ImageBase;
-                }
-                else
-                {
-                    return optionalHeader64.ImageBase;
-                }
+                return this.is32BitHeader ? this.optionalHeader32.ImageBase : this.optionalHeader64.ImageBase;
             }
         }
 
@@ -682,14 +675,7 @@
         {
             get
             {
-                if (this.is32BitHeader)
-                {
-                    return optionalHeader32.BaseOfCode;
-                }
-                else
-                {
-                    return optionalHeader64.BaseOfCode;
-                }
+                return this.is32BitHeader ? this.optionalHeader32.BaseOfCode : this.optionalHeader64.BaseOfCode;
             }
         }
 
@@ -697,14 +683,7 @@
         {
             get
             {
-                if (this.is32BitHeader)
-                {
-                    return optionalHeader32.SizeOfCode;
-                }
-                else
-                {
-                    return optionalHeader64.SizeOfCode;
-                }
+                return this.is32BitHeader ? this.optionalHeader32.SizeOfCode : this.optionalHeader64.SizeOfCode;
             }
         }
 
@@ -712,14 +691,7 @@
         {
             get
             {
-                if (this.is32BitHeader)
-                {
-                    return optionalHeader32.BaseOfCode;
-                }
-                else
-                {
-                    return optionalHeader64.BaseOfCode;
-                }
+                return this.is32BitHeader ? this.optionalHeader32.BaseOfCode : this.optionalHeader64.BaseOfCode;
             }
         }
 
