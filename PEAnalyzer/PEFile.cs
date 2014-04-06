@@ -39,6 +39,83 @@
 
         #endregion
 
+        #region Constructors
+
+        /// <summary>
+        /// Initializes a new instance of the PEFile class. Reads the file and parses the file structure.
+        /// </summary>
+        /// <param name="filePath">a file path to the location of the PE file</param>
+        public PEFile(string filePath)
+        {
+            // Initialize properties.
+            this.BasicBlocks = new HashSet<BasicBlock>();
+            this.DataChunks = new HashSet<DataChunk>();
+            this.AddressesOfFunctionsThatEventuallyStopExecution = new HashSet<ulong>();
+
+            // Read in the PE File.
+            using (FileStream fs = new FileStream(filePath, FileMode.Open, FileAccess.Read))
+            {
+                BinaryReader br = new BinaryReader(fs);
+
+                // Read the DOS header.
+                this.dosHeader = ReadToStruct<IMAGE_DOS_HEADER>(br);
+
+                // Place the file stream at the beginning of the NT header.
+                fs.Seek(this.dosHeader.e_lfanew, SeekOrigin.Begin);
+
+                // Read the NT header.
+                uint ntHeadersSignature = br.ReadUInt32();
+                IMAGE_FILE_HEADER fileHeader = ReadToStruct<IMAGE_FILE_HEADER>(br);
+                fs.Seek(this.dosHeader.e_lfanew, SeekOrigin.Begin);
+                ushort IMAGE_FILE_32BIT_MACHINE = 0x0100;
+                this.is32BitHeader = (IMAGE_FILE_32BIT_MACHINE & fileHeader.Characteristics) == IMAGE_FILE_32BIT_MACHINE;
+                if (this.is32BitHeader)
+                {
+                    this.ntHeaders32 = ReadToStruct<IMAGE_NT_HEADERS32>(br);
+                }
+                else
+                {
+                    this.ntHeaders64 = ReadToStruct<IMAGE_NT_HEADERS64>(br);
+                }
+
+                // Read the section headers.
+                for (int i = 0; i < this.NumberOfSections; ++i)
+                {
+                    IMAGE_SECTION_HEADER sectionHeader = ReadToStruct<IMAGE_SECTION_HEADER>(br);
+                    this.sectionHeaders.Add(sectionHeader);
+                }
+
+                // Read the .rdata section.
+                IMAGE_SECTION_HEADER rdataSectionHeader = this.sectionHeaders.FirstOrDefault(x => x.Section.StartsWith(".rdata"));
+                if (rdataSectionHeader.SizeOfRawData != 0)
+                {
+                    // Allocate .idata and .rdata byte arrays.
+                    if (this.is32BitHeader)
+                    {
+                        this.idata = new byte[this.ntHeaders32.OptionalHeader.IAT.Size];
+                    }
+                    else
+                    {
+                        this.idata = new byte[this.ntHeaders64.OptionalHeader.IAT.Size];
+                    }
+
+                    this.rdata = new byte[rdataSectionHeader.SizeOfRawData - this.idata.Length];
+
+                    // Move the file stream reader to the .rdata Section.
+                    fs.Seek(rdataSectionHeader.PointerToRawData, SeekOrigin.Begin);
+                    fs.Read(this.idata, 0, this.idata.Length);
+                    fs.Read(this.rdata, 0, this.rdata.Length);
+                }
+
+                // Read the code segment to a byte array.
+                this.code = new byte[this.SizeOfCode];
+                fs.Seek(this.BaseOfCodeInFile, SeekOrigin.Begin);
+                fs.Read(this.code, 0, this.code.Length);
+            }
+        }
+
+        #endregion
+
         #region Enumerations
 
         public enum MachineType : ushort
@@ -258,83 +335,6 @@
             /// The section can be written to.
             /// </summary>
             MemoryWrite = 0x80000000
-        }
-
-        #endregion
-
-        #region Constructors
-
-        /// <summary>
-        /// Initializes a new instance of the PEFile class. Reads the file and parses the file structure.
-        /// </summary>
-        /// <param name="filePath">a file path to the location of the PE file</param>
-        public PEFile(string filePath)
-        {
-            // Initialize properties.
-            this.BasicBlocks = new HashSet<BasicBlock>();
-            this.DataChunks = new HashSet<DataChunk>();
-            this.AddressesOfFunctionsThatEventuallyStopExecution = new HashSet<ulong>();
-
-            // Read in the PE File.
-            using (FileStream fs = new FileStream(filePath, FileMode.Open, FileAccess.Read))
-            {
-                BinaryReader br = new BinaryReader(fs);
-
-                // Read the DOS header.
-                this.dosHeader = ReadToStruct<IMAGE_DOS_HEADER>(br);
-
-                // Place the file stream at the beginning of the NT header.
-                fs.Seek(this.dosHeader.e_lfanew, SeekOrigin.Begin);
-
-                // Read the NT header.
-                uint ntHeadersSignature = br.ReadUInt32();
-                IMAGE_FILE_HEADER fileHeader = ReadToStruct<IMAGE_FILE_HEADER>(br);
-                fs.Seek(this.dosHeader.e_lfanew, SeekOrigin.Begin);
-                ushort IMAGE_FILE_32BIT_MACHINE = 0x0100;
-                this.is32BitHeader = (IMAGE_FILE_32BIT_MACHINE & fileHeader.Characteristics) == IMAGE_FILE_32BIT_MACHINE;
-                if (this.is32BitHeader)
-                {
-                    this.ntHeaders32 = ReadToStruct<IMAGE_NT_HEADERS32>(br);
-                }
-                else
-                {
-                    this.ntHeaders64 = ReadToStruct<IMAGE_NT_HEADERS64>(br);
-                }
-
-                // Read the section headers.
-                for (int i = 0; i < this.NumberOfSections; ++i)
-                {
-                    IMAGE_SECTION_HEADER sectionHeader = ReadToStruct<IMAGE_SECTION_HEADER>(br);
-                    this.sectionHeaders.Add(sectionHeader);
-                }
-
-                // Read the .rdata section.
-                IMAGE_SECTION_HEADER rdataSectionHeader = this.sectionHeaders.FirstOrDefault(x => x.Section.StartsWith(".rdata"));
-                if (rdataSectionHeader.SizeOfRawData != 0)
-                {
-                    // Allocate .idata and .rdata byte arrays.
-                    if (this.is32BitHeader)
-                    {
-                        this.idata = new byte[this.ntHeaders32.OptionalHeader.IAT.Size];
-                    }
-                    else
-                    {
-                        this.idata = new byte[this.ntHeaders64.OptionalHeader.IAT.Size];
-                    }
-
-                    this.rdata = new byte[rdataSectionHeader.SizeOfRawData - this.idata.Length];
-
-                    // Move the file stream reader to the .rdata Section.
-                    fs.Seek(rdataSectionHeader.PointerToRawData, SeekOrigin.Begin);
-                    fs.Read(this.idata, 0, this.idata.Length);
-                    fs.Read(this.rdata, 0, this.rdata.Length);
-                }
-
-                // Read the code segment to a byte array.
-                this.code = new byte[this.SizeOfCode];
-                fs.Seek(this.BaseOfCodeInFile, SeekOrigin.Begin);
-                fs.Read(this.code, 0, this.code.Length);
-            }
         }
 
         #endregion
