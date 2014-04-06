@@ -1683,18 +1683,35 @@
             }
         }
 
+        /// <summary>
+        /// Represents a memory address that is referenced from data in the PE file.
+        /// </summary>
         private class DiscoveredReference
         {
+            /// <summary>
+            /// Initializes a new instance of the DiscoveredReference class.
+            /// </summary>
+            /// <param name="address">the virtual address at which the reference resides</param>
+            /// <param name="addressSize">the number of bytes of the address that is referenced</param>
             public DiscoveredReference(ulong address, int addressSize)
             {
                 this.Address = address;
                 this.ReferencedAddressAsRawBytes = new byte[addressSize];
             }
 
+            /// <summary>
+            /// Gets the referenced address as a byte array.
+            /// </summary>
             public byte[] ReferencedAddressAsRawBytes { get; private set; }
 
+            /// <summary>
+            /// Gets the address at which the reference resides.
+            /// </summary>
             public ulong Address { get; private set; }
 
+            /// <summary>
+            /// Gets the address that is referenced.
+            /// </summary>
             public ulong ReferencedAddress
             {
                 get
