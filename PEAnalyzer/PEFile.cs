@@ -475,6 +475,9 @@
 
         #region Properties
 
+        /// <summary>
+        /// Gets the preferred address of the first byte of the image when it is loaded in memory.
+        /// </summary>
         public ulong ImageBase
         {
             get
@@ -483,6 +486,9 @@
             }
         }
 
+        /// <summary>
+        /// Gets a pointer to the beginning of the code section, relative to the image base.
+        /// </summary>
         public uint BaseOfCodeInMemory
         {
             get
@@ -491,6 +497,10 @@
             }
         }
 
+        /// <summary>
+        /// Gets the size of the code section, in bytes, or the sum of all such sections if there are multiple code
+        /// sections.
+        /// </summary>
         public uint SizeOfCode
         {
             get
@@ -499,6 +509,9 @@
             }
         }
 
+        /// <summary>
+        /// Gets a pointer to the offset of the beginning of the .text section in the PE file.
+        /// </summary>
         public uint BaseOfCodeInFile
         {
             get
@@ -507,12 +520,24 @@
             }
         }
 
+        /// <summary>
+        /// Gets a collection of basic blocks in the PE file.
+        /// </summary>
         public HashSet<BasicBlock> BasicBlocks { get; private set; }
 
+        /// <summary>
+        /// Gets a collection of data chunks in the PE file, which do not contain any code.
+        /// </summary>
         public HashSet<DataChunk> DataChunks { get; private set; }
 
+        /// <summary>
+        /// Gets a collection of addresses of functions that will eventually stop code execution if called.
+        /// </summary>
         public HashSet<ulong> AddressesOfFunctionsThatEventuallyStopExecution { get; private set; }
 
+        /// <summary>
+        /// Gets the number of sections in the NT file header.
+        /// </summary>
         private uint NumberOfSections
         {
             get
@@ -528,6 +553,10 @@
             }
         }
 
+        /// <summary>
+        /// Gets the optional file header from the NT file header. Check is32BitHeader to determine if this or
+        /// OptionalHeader64 should be used.
+        /// </summary>
         private IMAGE_OPTIONAL_HEADER32 OptionalHeader32
         {
             get
@@ -536,6 +565,10 @@
             }
         }
 
+        /// <summary>
+        /// Gets the optional file header from the NT file header. Check is32BitHeader to determine if this or
+        /// OptionalHeader32 should be used.
+        /// </summary>
         private IMAGE_OPTIONAL_HEADER64 OptionalHeader64
         {
             get
