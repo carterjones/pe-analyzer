@@ -46,26 +46,26 @@
         {
             [MarshalAs(UnmanagedType.ByValArray, SizeConst = 2)]
             public char[] e_magic;       // Magic number
-            public UInt16 e_cblp;        // Bytes on last page of file
-            public UInt16 e_cp;          // Pages in file
-            public UInt16 e_crlc;        // Relocations
-            public UInt16 e_cparhdr;     // Size of header in paragraphs
-            public UInt16 e_minalloc;    // Minimum extra paragraphs needed
-            public UInt16 e_maxalloc;    // Maximum extra paragraphs needed
-            public UInt16 e_ss;          // Initial (relative) SS value
-            public UInt16 e_sp;          // Initial SP value
-            public UInt16 e_csum;        // Checksum
-            public UInt16 e_ip;          // Initial IP value
-            public UInt16 e_cs;          // Initial (relative) CS value
-            public UInt16 e_lfarlc;      // File address of relocation table
-            public UInt16 e_ovno;        // Overlay number
+            public ushort e_cblp;        // Bytes on last page of file
+            public ushort e_cp;          // Pages in file
+            public ushort e_crlc;        // Relocations
+            public ushort e_cparhdr;     // Size of header in paragraphs
+            public ushort e_minalloc;    // Minimum extra paragraphs needed
+            public ushort e_maxalloc;    // Maximum extra paragraphs needed
+            public ushort e_ss;          // Initial (relative) SS value
+            public ushort e_sp;          // Initial SP value
+            public ushort e_csum;        // Checksum
+            public ushort e_ip;          // Initial IP value
+            public ushort e_cs;          // Initial (relative) CS value
+            public ushort e_lfarlc;      // File address of relocation table
+            public ushort e_ovno;        // Overlay number
             [MarshalAs(UnmanagedType.ByValArray, SizeConst = 4)]
-            public UInt16[] e_res1;      // Reserved words
-            public UInt16 e_oemid;       // OEM identifier (for e_oeminfo)
-            public UInt16 e_oeminfo;     // OEM information; e_oemid specific
+            public ushort[] e_res1;      // Reserved words
+            public ushort e_oemid;       // OEM identifier (for e_oeminfo)
+            public ushort e_oeminfo;     // OEM information; e_oemid specific
             [MarshalAs(UnmanagedType.ByValArray, SizeConst = 10)]
-            public UInt16[] e_res2;      // Reserved words
-            public Int32 e_lfanew;       // File address of new exe header
+            public ushort[] e_res2;      // Reserved words
+            public int e_lfanew;         // File address of new exe header
         }
 
         [StructLayout(LayoutKind.Explicit)]
@@ -99,13 +99,13 @@
         [StructLayout(LayoutKind.Sequential)]
         public struct IMAGE_FILE_HEADER
         {
-            public UInt16 Machine;
-            public UInt16 NumberOfSections;
-            public UInt32 TimeDateStamp;
-            public UInt32 PointerToSymbolTable;
-            public UInt32 NumberOfSymbols;
-            public UInt16 SizeOfOptionalHeader;
-            public UInt16 Characteristics;
+            public ushort Machine;
+            public ushort NumberOfSections;
+            public uint TimeDateStamp;
+            public uint PointerToSymbolTable;
+            public uint NumberOfSymbols;
+            public ushort SizeOfOptionalHeader;
+            public ushort Characteristics;
         }
 
         [StructLayout(LayoutKind.Explicit)]
@@ -392,8 +392,8 @@
         [StructLayout(LayoutKind.Sequential)]
         public struct IMAGE_DATA_DIRECTORY
         {
-            public UInt32 VirtualAddress;
-            public UInt32 Size;
+            public uint VirtualAddress;
+            public uint Size;
         }
 
         [StructLayout(LayoutKind.Explicit)]
@@ -404,28 +404,28 @@
             public char[] Name;
 
             [FieldOffset(8)]
-            public UInt32 VirtualSize;
+            public uint VirtualSize;
 
             [FieldOffset(12)]
-            public UInt32 VirtualAddress;
+            public uint VirtualAddress;
 
             [FieldOffset(16)]
-            public UInt32 SizeOfRawData;
+            public uint SizeOfRawData;
 
             [FieldOffset(20)]
-            public UInt32 PointerToRawData;
+            public uint PointerToRawData;
 
             [FieldOffset(24)]
-            public UInt32 PointerToRelocations;
+            public uint PointerToRelocations;
 
             [FieldOffset(28)]
-            public UInt32 PointerToLinenumbers;
+            public uint PointerToLinenumbers;
 
             [FieldOffset(32)]
-            public UInt16 NumberOfRelocations;
+            public ushort NumberOfRelocations;
 
             [FieldOffset(34)]
-            public UInt16 NumberOfLinenumbers;
+            public ushort NumberOfLinenumbers;
 
             [FieldOffset(36)]
             public DataSectionFlags Characteristics;
@@ -686,10 +686,10 @@
                 fs.Seek(this.dosHeader.e_lfanew, SeekOrigin.Begin);
 
                 // Read the NT header.
-                UInt32 ntHeadersSignature = br.ReadUInt32();
+                uint ntHeadersSignature = br.ReadUInt32();
                 IMAGE_FILE_HEADER fileHeader = ReadToStruct<IMAGE_FILE_HEADER>(br);
                 fs.Seek(this.dosHeader.e_lfanew, SeekOrigin.Begin);
-                UInt16 IMAGE_FILE_32BIT_MACHINE = 0x0100;
+                ushort IMAGE_FILE_32BIT_MACHINE = 0x0100;
                 this.is32BitHeader = (IMAGE_FILE_32BIT_MACHINE & fileHeader.Characteristics) == IMAGE_FILE_32BIT_MACHINE;
                 if (this.is32BitHeader)
                 {
