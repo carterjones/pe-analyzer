@@ -735,6 +735,10 @@
 
         #region Constructors
 
+        /// <summary>
+        /// Initializes a new instance of the PEFile class. Reads the file and parses the file structure.
+        /// </summary>
+        /// <param name="filePath">a file path to the location of the PE file</param>
         public PEFile(string filePath)
         {
             // Initialize properties.
@@ -808,6 +812,10 @@
 
         #region Methods
 
+        /// <summary>
+        /// Calculates the byte alignment sequences of the code section.
+        /// </summary>
+        /// <returns>a set of byte alignment sequences that contain no code or data</returns>
         private HashSet<AlignmentByteSequence> CalculateByteAlignmentSequences()
         {
             if (this.code == null)
@@ -900,6 +908,11 @@
             return alignmentSequences;
         }
 
+        /// <summary>
+        /// Gets the chunks of code found between the byte alignment sequences. These may include data chunks.
+        /// </summary>
+        /// <param name="alignmentSequences">the alignment sequences found in the code segment</param>
+        /// <returns>a set of code chunks, which may include data chunks</returns>
         private HashSet<CodeChunk> GetCodeChunks(HashSet<AlignmentByteSequence> alignmentSequences)
         {
             HashSet<CodeChunk> codeChunks = new HashSet<CodeChunk>();
@@ -924,6 +937,13 @@
             return codeChunks;
         }
 
+        /// <summary>
+        /// Checks to see if a basic block at the provided address exists. If it does, the existing basic block is
+        /// returned. If it does not exist, then a new basic block is created and returned.
+        /// </summary>
+        /// <param name="basicBlocks">a collection of pre-existing basic blocks</param>
+        /// <param name="address">the address of an existing or new basic block</param>
+        /// <returns>a basic block at the specified address</returns>
         private BasicBlock GetBasicBlockOrCreateNewBasicBlock(Dictionary<ulong, BasicBlock> basicBlocks, ulong address)
         {
             // See if the basic block already exists.
@@ -941,7 +961,11 @@
             }
         }
 
-        // Add basic blocks based on control flow transitions.
+        /// <summary>
+        /// Add basic blocks to a collection of basic blocks, given a collection of instructions.
+        /// </summary>
+        /// <param name="basicBlocks">a pre-existing collection of basic blocks to be expanded</param>
+        /// <param name="instructions">a collection of instructions to be added to basic blocks</param>
         private void AddBasicBlocksFromInstructions(Dictionary<ulong, BasicBlock> basicBlocks, List<Instruction> instructions)
         {
             // Start the first basic block.
@@ -1010,6 +1034,14 @@
             }
         }
 
+        /// <summary>
+        /// Combines two code chunks into a single chunk, including any bytes between the two, which are not stored in
+        /// either chunk, if such bytes exist.
+        /// </summary>
+        /// <param name="cc1">the first of two code chunks to combine</param>
+        /// <param name="cc2">the second of two code chunks to combine</param>
+        /// <returns>a single code chunk that starts from the beginning of the earliest occurring chunk and ends at the
+        /// last byte of the latter occurring chunk</returns>
         private CodeChunk MergeCodeChunks(CodeChunk cc1, CodeChunk cc2)
         {
             // Find out which code chunk comes first and which comes second.
@@ -1031,6 +1063,12 @@
             return merged;
         }
 
+        /// <summary>
+        /// Scans the supplied data for byte arrays that can be converted to an address that exists within the code
+        /// chunk.
+        /// </summary>
+        /// <param name="data">the data to be scanned</param>
+        /// <returns>the offset of the first address reference found, or null if no such reference is found</returns>
         private ulong? FindReferenceArray(byte[] data)
         {
             ulong addressSize = this.is32BitHeader ? (ulong)4 : (ulong)8;
@@ -1098,6 +1136,10 @@
             return null;
         }
 
+        /// <summary>
+        /// Searches for basic blocks in the code segment of this PE file.
+        /// </summary>
+        /// <returns>a collection of basic blocks that exist in the code segment of this PE file</returns>
         public HashSet<BasicBlock> FindBasicBlocks()
         {
             // Get the aligment byte sequences, so that aligment bytes are not interpreted as code.
@@ -1388,7 +1430,7 @@
         }
 
         /// <summary>
-        /// Determine if the instruction allows code execution to continue to the instruction immidiately following
+        /// Determine if the instruction allows code execution to continue to the instruction immediately following
         /// the instruction.
         /// </summary>
         /// <param name="i">the instruction to test</param>
@@ -1399,6 +1441,12 @@
                      i.FlowType == Instruction.ControlFlow.UnconditionalBranch);
         }
 
+        /// <summary>
+        /// Scans data for references to addresses in the code section.
+        /// </summary>
+        /// <param name="data">the data to be scanned for references</param>
+        /// <param name="dataVirtualBaseAddress">the virtual address of the data being scanned</param>
+        /// <returns>a collection of discovered references</returns>
         private HashSet<DiscoveredReference> GetAddressReferencesFromRawData(byte[] data, ulong dataVirtualBaseAddress)
         {
             int addressSize = this.is32BitHeader ? 4 : 8;
@@ -1441,7 +1489,13 @@
             }
         }
 
-        // Reads in a block from a binary stream and converts it to the struct type specified by the template parameter.
+        /// <summary>
+        /// Reads in a block from a binary stream and converts it to the struct type specified by the template
+        /// parameter.
+        /// </summary>
+        /// <typeparam name="T">the type of structure being read</typeparam>
+        /// <param name="reader">a binary reader that places the data into a struct of type T</param>
+        /// <returns>a new object composed of bytes read by the reader into the supplied type of object</returns>
         public static T ReadToStruct<T>(BinaryReader reader)
         {
             // Read in a byte array.
