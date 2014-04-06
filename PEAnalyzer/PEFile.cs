@@ -724,7 +724,9 @@
         }
 
         public HashSet<BasicBlock> BasicBlocks { get; private set; }
+
         public HashSet<DataChunk> DataChunks { get; private set; }
+
         public HashSet<ulong> AddressesOfFunctionsThatEventuallyStopExecution { get; private set; }
 
         private uint NumberOfSections
