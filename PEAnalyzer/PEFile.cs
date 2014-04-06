@@ -35,7 +35,7 @@
 
         private ulong functionByteAlignment;
 
-        byte[] alignmentBytes = new byte[] { 0x90, 0xcc };
+        private byte[] alignmentBytes = new byte[] { 0x90, 0xcc };
 
         #endregion
 
