@@ -1243,6 +1243,7 @@
 
         [SuppressMessage("Microsoft.StyleCop.CSharp.NamingRules", "SA1307:AccessibleFieldsMustBeginWithUpperCaseLetter", Justification = "Using Microsoft structure field names.")]
         [SuppressMessage("Microsoft.StyleCop.CSharp.NamingRules", "SA1310:FieldNamesMustNotContainUnderscore", Justification = "Using Microsoft structure field names.")]
+        [SuppressMessage("Microsoft.StyleCop.CSharp.DocumentationRules", "SA1600:ElementsMustBeDocumented", Justification = "Using Microsoft structures.")]
         [SuppressMessage("Microsoft.StyleCop.CSharp.DocumentationRules", "SA1630:DocumentationTextMustContainWhitespace", Justification = "Using Microsoft comments.")]
         [StructLayout(LayoutKind.Sequential)]
         public struct IMAGE_DOS_HEADER
@@ -1352,6 +1353,7 @@
         /// <remarks>
         /// See http://msdn.microsoft.com/en-us/library/windows/desktop/ms680336.aspx
         /// </remarks>
+        [SuppressMessage("Microsoft.StyleCop.CSharp.DocumentationRules", "SA1600:ElementsMustBeDocumented", Justification = "Using Microsoft structures.")]
         [StructLayout(LayoutKind.Explicit)]
         public struct IMAGE_NT_HEADERS32
         {
@@ -1372,6 +1374,7 @@
         /// <remarks>
         /// See http://msdn.microsoft.com/en-us/library/windows/desktop/ms680336.aspx
         /// </remarks>
+        [SuppressMessage("Microsoft.StyleCop.CSharp.DocumentationRules", "SA1600:ElementsMustBeDocumented", Justification = "Using Microsoft structures.")]
         [StructLayout(LayoutKind.Explicit)]
         public struct IMAGE_NT_HEADERS64
         {
@@ -1389,6 +1392,7 @@
         /// <summary>
         /// Represents the COFF header format.
         /// </summary>
+        [SuppressMessage("Microsoft.StyleCop.CSharp.DocumentationRules", "SA1600:ElementsMustBeDocumented", Justification = "Using Microsoft structures.")]
         [StructLayout(LayoutKind.Sequential)]
         public struct IMAGE_FILE_HEADER
         {
@@ -1413,6 +1417,7 @@
         /// <remarks>
         /// See http://msdn.microsoft.com/en-us/library/windows/desktop/ms680339.aspx
         /// </remarks>
+        [SuppressMessage("Microsoft.StyleCop.CSharp.DocumentationRules", "SA1600:ElementsMustBeDocumented", Justification = "Using Microsoft structures.")]
         [StructLayout(LayoutKind.Explicit)]
         public struct IMAGE_OPTIONAL_HEADER32
         {
@@ -1561,6 +1566,7 @@
         /// <remarks>
         /// See http://msdn.microsoft.com/en-us/library/windows/desktop/ms680339.aspx
         /// </remarks>
+        [SuppressMessage("Microsoft.StyleCop.CSharp.DocumentationRules", "SA1600:ElementsMustBeDocumented", Justification = "Using Microsoft structures.")]
         [StructLayout(LayoutKind.Explicit)]
         public struct IMAGE_OPTIONAL_HEADER64
         {
