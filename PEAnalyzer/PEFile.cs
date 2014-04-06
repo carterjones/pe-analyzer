@@ -858,6 +858,14 @@
                     currentBasicBlock = basicBlocks[i.Address];
                 }
 
+                // Link the next and previous blocks to this basic block if last instruction has a branch target to
+                // the first instruction in this basic block.
+                if (currentBasicBlock.FirstInstructionAddress == i.BranchTarget)
+                {
+                    currentBasicBlock.NextBasicBlocks.Add(currentBasicBlock);
+                    currentBasicBlock.PreviousBasicBlocks.Add(currentBasicBlock);
+                }
+
                 currentBasicBlock.Instructions.Add(i);
             }
 
