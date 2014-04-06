@@ -1481,14 +1481,6 @@
             return discoveredReferences;
         }
 
-        private IEnumerator<BasicBlock> GetNextBasicBlock(IEnumerable<BasicBlock> basicBlocks)
-        {
-            foreach (BasicBlock bb in basicBlocks)
-            {
-                yield return bb;
-            }
-        }
-
         /// <summary>
         /// Reads in a block from a binary stream and converts it to the struct type specified by the template
         /// parameter.
