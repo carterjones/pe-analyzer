@@ -119,6 +119,13 @@
 
         #region Enumerations
 
+        /// <summary>
+        /// The architecture type of the computer.
+        /// </summary>
+        /// <remarks>
+        /// See http://msdn.microsoft.com/en-us/library/windows/desktop/ms680313.aspx
+        /// </remarks>
+        [SuppressMessage("Microsoft.StyleCop.CSharp.DocumentationRules", "SA1602:EnumerationItemsMustBeDocumented", Justification = "Using Microsoft fields.")]
         public enum MachineType : ushort
         {
             Native = 0,
@@ -127,12 +134,26 @@
             x64 = 0x8664
         }
 
+        /// <summary>
+        /// The state of the image file.
+        /// </summary>
+        /// <remarks>
+        /// See http://msdn.microsoft.com/en-us/library/windows/desktop/ms680339.aspx
+        /// </remarks>
+        [SuppressMessage("Microsoft.StyleCop.CSharp.DocumentationRules", "SA1602:EnumerationItemsMustBeDocumented", Justification = "Using Microsoft fields.")]
         public enum MagicType : ushort
         {
             IMAGE_NT_OPTIONAL_HDR32_MAGIC = 0x10b,
             IMAGE_NT_OPTIONAL_HDR64_MAGIC = 0x20b
         }
 
+        /// <summary>
+        /// The subsystem required to run this image.
+        /// </summary>
+        /// <remarks>
+        /// See http://msdn.microsoft.com/en-us/library/windows/desktop/ms680339.aspx
+        /// </remarks>
+        [SuppressMessage("Microsoft.StyleCop.CSharp.DocumentationRules", "SA1602:EnumerationItemsMustBeDocumented", Justification = "Using Microsoft fields.")]
         public enum SubSystemType : ushort
         {
             IMAGE_SUBSYSTEM_UNKNOWN = 0,
@@ -148,6 +169,13 @@
             IMAGE_SUBSYSTEM_XBOX = 14
         }
 
+        /// <summary>
+        /// The DLL characteristics of the image.
+        /// </summary>
+        /// <remarks>
+        /// See http://msdn.microsoft.com/en-us/library/windows/desktop/ms680339.aspx
+        /// </remarks>
+        [SuppressMessage("Microsoft.StyleCop.CSharp.DocumentationRules", "SA1602:EnumerationItemsMustBeDocumented", Justification = "Using Microsoft fields.")]
         public enum DllCharacteristicsType : ushort
         {
             RES_0 = 0x0001,
@@ -165,6 +193,12 @@
             IMAGE_DLLCHARACTERISTICS_TERMINAL_SERVER_AWARE = 0x8000
         }
 
+        /// <summary>
+        /// The characteristics of the image.
+        /// </summary>
+        /// <remarks>
+        /// See http://msdn.microsoft.com/en-us/library/windows/desktop/ms680341.aspx
+        /// </remarks>
         [Flags]
         public enum DataSectionFlags : uint
         {
