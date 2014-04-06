@@ -8,7 +8,10 @@
     using System.Text;
     using Bunseki;
 
-    class PEFile
+    /// <summary>
+    /// Represents a PE file. Contains information about the file and can be used for extracting data from the file.
+    /// </summary>
+    public class PEFile
     {
         #region Fields
 
