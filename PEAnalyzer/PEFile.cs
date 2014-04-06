@@ -1250,6 +1250,12 @@
             public int e_lfanew;
         }
 
+        /// <summary>
+        /// Represents the PE header format. (32-bit version)
+        /// </summary>
+        /// <remarks>
+        /// http://msdn.microsoft.com/en-us/library/windows/desktop/ms680336.aspx
+        /// </remarks>
         [StructLayout(LayoutKind.Explicit)]
         public struct IMAGE_NT_HEADERS32
         {
@@ -1264,6 +1270,12 @@
             public IMAGE_OPTIONAL_HEADER32 OptionalHeader;
         }
 
+        /// <summary>
+        /// Represents the PE header format. (64-bit version)
+        /// </summary>
+        /// <remarks>
+        /// http://msdn.microsoft.com/en-us/library/windows/desktop/ms680336.aspx
+        /// </remarks>
         [StructLayout(LayoutKind.Explicit)]
         public struct IMAGE_NT_HEADERS64
         {
@@ -1278,18 +1290,33 @@
             public IMAGE_OPTIONAL_HEADER64 OptionalHeader;
         }
 
+        /// <summary>
+        /// Represents the COFF header format.
+        /// </summary>
         [StructLayout(LayoutKind.Sequential)]
         public struct IMAGE_FILE_HEADER
         {
             public MachineType Machine;
+
             public ushort NumberOfSections;
+
             public uint TimeDateStamp;
+
             public uint PointerToSymbolTable;
+
             public uint NumberOfSymbols;
+
             public ushort SizeOfOptionalHeader;
+
             public ushort Characteristics;
         }
 
+        /// <summary>
+        /// Represents the optional header format. (32-bit version)
+        /// </summary>
+        /// <remarks>
+        /// http://msdn.microsoft.com/en-us/library/windows/desktop/ms680339.aspx
+        /// </remarks>
         [StructLayout(LayoutKind.Explicit)]
         public struct IMAGE_OPTIONAL_HEADER32
         {
@@ -1432,6 +1459,12 @@
             public IMAGE_DATA_DIRECTORY Reserved;
         }
 
+        /// <summary>
+        /// Represents the optional header format. (64-bit version)
+        /// </summary>
+        /// <remarks>
+        /// http://msdn.microsoft.com/en-us/library/windows/desktop/ms680339.aspx
+        /// </remarks>
         [StructLayout(LayoutKind.Explicit)]
         public struct IMAGE_OPTIONAL_HEADER64
         {
@@ -1571,13 +1604,26 @@
             public IMAGE_DATA_DIRECTORY Reserved;
         }
 
+        /// <summary>
+        /// Represents the data directory.
+        /// </summary>
+        /// <remarks>
+        /// http://msdn.microsoft.com/en-us/library/windows/desktop/ms680305.aspx
+        /// </remarks>
         [StructLayout(LayoutKind.Sequential)]
         public struct IMAGE_DATA_DIRECTORY
         {
             public uint VirtualAddress;
+
             public uint Size;
         }
 
+        /// <summary>
+        /// Represents the image section header format.
+        /// </summary>
+        /// <remarks>
+        /// http://msdn.microsoft.com/en-us/library/windows/desktop/ms680341.aspx
+        /// </remarks>
         [StructLayout(LayoutKind.Explicit)]
         public struct IMAGE_SECTION_HEADER
         {
@@ -1612,6 +1658,9 @@
             [FieldOffset(36)]
             public DataSectionFlags Characteristics;
 
+            /// <summary>
+            /// Gets a string representation of the section.
+            /// </summary>
             public string Section
             {
                 get { return new string(this.Name); }
