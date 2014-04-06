@@ -25,22 +25,6 @@
 
         private IMAGE_NT_HEADERS64 ntHeaders64;
 
-        private IMAGE_OPTIONAL_HEADER32 optionalHeader32
-        {
-            get
-            {
-                return ntHeaders32.OptionalHeader;
-            }
-        }
-
-        private IMAGE_OPTIONAL_HEADER64 optionalHeader64
-        {
-            get
-            {
-                return ntHeaders64.OptionalHeader;
-            }
-        }
-
         private List<IMAGE_SECTION_HEADER> sectionHeaders = new List<IMAGE_SECTION_HEADER>();
 
         private byte[] code;
@@ -755,6 +739,22 @@
                 {
                     return this.ntHeaders64.FileHeader.NumberOfSections;
                 }
+            }
+        }
+
+        private IMAGE_OPTIONAL_HEADER32 optionalHeader32
+        {
+            get
+            {
+                return ntHeaders32.OptionalHeader;
+            }
+        }
+
+        private IMAGE_OPTIONAL_HEADER64 optionalHeader64
+        {
+            get
+            {
+                return ntHeaders64.OptionalHeader;
             }
         }
 
