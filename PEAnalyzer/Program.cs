@@ -2,16 +2,22 @@
 {
     using System;
     using System.Collections.Generic;
+    using System.IO;
     using System.Linq;
     using System.Runtime.InteropServices;
     using System.Text;
-    using System.IO;
-    //using Capstone;
     using Bunseki;
 
-    class Program
+    /// <summary>
+    /// The main class to be run when the executable is run.
+    /// </summary>
+    public class Program
     {
-        static void Main(string[] args)
+        /// <summary>
+        /// The entry function of the executable.
+        /// </summary>
+        /// <param name="args">arguments passed to the command line</param>
+        public static void Main(string[] args)
         {
             string filename = @"D:\inbox\notepad++.exe";
             PEFile pef = new PEFile(filename);
