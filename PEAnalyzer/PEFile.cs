@@ -2,6 +2,7 @@
 {
     using System;
     using System.Collections.Generic;
+    using System.Diagnostics.CodeAnalysis;
     using System.IO;
     using System.Linq;
     using System.Runtime.InteropServices;
@@ -1148,6 +1149,9 @@
 
         #region Structures
 
+        [SuppressMessage("Microsoft.StyleCop.CSharp.NamingRules", "SA1307:AccessibleFieldsMustBeginWithUpperCaseLetter", Justification = "Using Microsoft structure field names.")]
+        [SuppressMessage("Microsoft.StyleCop.CSharp.NamingRules", "SA1310:FieldNamesMustNotContainUnderscore", Justification = "Using Microsoft structure field names.")]
+        [SuppressMessage("Microsoft.StyleCop.CSharp.DocumentationRules", "SA1630:DocumentationTextMustContainWhitespace", Justification = "Using Microsoft comments.")]
         [StructLayout(LayoutKind.Sequential)]
         public struct IMAGE_DOS_HEADER
         {
@@ -1254,7 +1258,7 @@
         /// Represents the PE header format. (32-bit version)
         /// </summary>
         /// <remarks>
-        /// http://msdn.microsoft.com/en-us/library/windows/desktop/ms680336.aspx
+        /// See http://msdn.microsoft.com/en-us/library/windows/desktop/ms680336.aspx
         /// </remarks>
         [StructLayout(LayoutKind.Explicit)]
         public struct IMAGE_NT_HEADERS32
@@ -1274,7 +1278,7 @@
         /// Represents the PE header format. (64-bit version)
         /// </summary>
         /// <remarks>
-        /// http://msdn.microsoft.com/en-us/library/windows/desktop/ms680336.aspx
+        /// See http://msdn.microsoft.com/en-us/library/windows/desktop/ms680336.aspx
         /// </remarks>
         [StructLayout(LayoutKind.Explicit)]
         public struct IMAGE_NT_HEADERS64
@@ -1315,7 +1319,7 @@
         /// Represents the optional header format. (32-bit version)
         /// </summary>
         /// <remarks>
-        /// http://msdn.microsoft.com/en-us/library/windows/desktop/ms680339.aspx
+        /// See http://msdn.microsoft.com/en-us/library/windows/desktop/ms680339.aspx
         /// </remarks>
         [StructLayout(LayoutKind.Explicit)]
         public struct IMAGE_OPTIONAL_HEADER32
@@ -1463,7 +1467,7 @@
         /// Represents the optional header format. (64-bit version)
         /// </summary>
         /// <remarks>
-        /// http://msdn.microsoft.com/en-us/library/windows/desktop/ms680339.aspx
+        /// See http://msdn.microsoft.com/en-us/library/windows/desktop/ms680339.aspx
         /// </remarks>
         [StructLayout(LayoutKind.Explicit)]
         public struct IMAGE_OPTIONAL_HEADER64
@@ -1608,8 +1612,9 @@
         /// Represents the data directory.
         /// </summary>
         /// <remarks>
-        /// http://msdn.microsoft.com/en-us/library/windows/desktop/ms680305.aspx
+        /// See http://msdn.microsoft.com/en-us/library/windows/desktop/ms680305.aspx
         /// </remarks>
+        [SuppressMessage("Microsoft.StyleCop.CSharp.DocumentationRules", "SA1600:ElementsMustBeDocumented", Justification = "Documented online at MSDN.")]
         [StructLayout(LayoutKind.Sequential)]
         public struct IMAGE_DATA_DIRECTORY
         {
@@ -1622,8 +1627,9 @@
         /// Represents the image section header format.
         /// </summary>
         /// <remarks>
-        /// http://msdn.microsoft.com/en-us/library/windows/desktop/ms680341.aspx
+        /// See http://msdn.microsoft.com/en-us/library/windows/desktop/ms680341.aspx
         /// </remarks>
+        [SuppressMessage("Microsoft.StyleCop.CSharp.DocumentationRules", "SA1600:ElementsMustBeDocumented", Justification = "Documented online at MSDN.")]
         [StructLayout(LayoutKind.Explicit)]
         public struct IMAGE_SECTION_HEADER
         {

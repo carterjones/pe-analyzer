@@ -1,8 +1,13 @@
 <StyleCopSettings Version="105">
   <GlobalSettings>
     <CollectionProperty Name="RecognizedWords">
+      <Value>aspx</Value>
+      <Value>drectve</Value>
+      <Value>ms</Value>
+      <Value>msdn</Value>
       <Value>oemid</Value>
       <Value>oeminfo</Value>
+      <Value>pageable</Value>
     </CollectionProperty>
   </GlobalSettings>
   <Analyzers>
@@ -45,6 +50,14 @@
         </Rule>
       </Rules>
       <AnalyzerSettings />
+    </Analyzer>
+    <Analyzer AnalyzerId="StyleCop.CSharp.NamingRules">
+      <AnalyzerSettings>
+        <CollectionProperty Name="Hungarian">
+          <Value>cc</Value>
+          <Value>nt</Value>
+        </CollectionProperty>
+      </AnalyzerSettings>
     </Analyzer>
   </Analyzers>
 </StyleCopSettings>
