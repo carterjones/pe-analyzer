@@ -1506,58 +1506,6 @@
 
         #region Classes
 
-        private class DiscoveredReference
-        {
-            public DiscoveredReference(ulong address, int addressSize)
-            {
-                this.Address = address;
-                this.ReferencedAddressAsRawBytes = new byte[addressSize];
-            }
-
-            public byte[] ReferencedAddressAsRawBytes { get; private set; }
-
-            public ulong Address { get; private set; }
-
-            public ulong ReferencedAddress
-            {
-                get
-                {
-                    ulong address = 0;
-                    if (this.ReferencedAddressAsRawBytes.Length == 4)
-                    {
-                        address += BitConverter.ToUInt32(this.ReferencedAddressAsRawBytes, 0);
-                    }
-                    else
-                    {
-                        address += BitConverter.ToUInt64(this.ReferencedAddressAsRawBytes, 0);
-                    }
-
-                    return address;
-                }
-            }
-        }
-
-        private class AlignmentByteSequence
-        {
-            public AlignmentByteSequence(ulong offset, ulong length)
-            {
-                this.Offset = offset;
-                this.Length = length;
-            }
-
-            public ulong Offset { get; private set; }
-
-            public ulong Length { get; private set; }
-
-            public ulong NextInstructionOffset
-            {
-                get
-                {
-                    return this.Offset + this.Length;
-                }
-            }
-        }
-
         public class DataChunk : CodeChunk
         {
             public DataChunk(CodeChunk cc)
@@ -1595,6 +1543,58 @@
                 this.Offset = offset;
                 this.Code = new byte[length];
                 this.EndsOnAlignmentBoundary = endsOnAlignmentBoundary;
+            }
+        }
+
+        private class AlignmentByteSequence
+        {
+            public AlignmentByteSequence(ulong offset, ulong length)
+            {
+                this.Offset = offset;
+                this.Length = length;
+            }
+
+            public ulong Offset { get; private set; }
+
+            public ulong Length { get; private set; }
+
+            public ulong NextInstructionOffset
+            {
+                get
+                {
+                    return this.Offset + this.Length;
+                }
+            }
+        }
+
+        private class DiscoveredReference
+        {
+            public DiscoveredReference(ulong address, int addressSize)
+            {
+                this.Address = address;
+                this.ReferencedAddressAsRawBytes = new byte[addressSize];
+            }
+
+            public byte[] ReferencedAddressAsRawBytes { get; private set; }
+
+            public ulong Address { get; private set; }
+
+            public ulong ReferencedAddress
+            {
+                get
+                {
+                    ulong address = 0;
+                    if (this.ReferencedAddressAsRawBytes.Length == 4)
+                    {
+                        address += BitConverter.ToUInt32(this.ReferencedAddressAsRawBytes, 0);
+                    }
+                    else
+                    {
+                        address += BitConverter.ToUInt64(this.ReferencedAddressAsRawBytes, 0);
+                    }
+
+                    return address;
+                }
             }
         }
 
