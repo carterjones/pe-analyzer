@@ -3,11 +3,14 @@
     <CollectionProperty Name="RecognizedWords">
       <Value>aspx</Value>
       <Value>drectve</Value>
+      <Value>idata</Value>
       <Value>ms</Value>
       <Value>msdn</Value>
+      <Value>nt</Value>
       <Value>oemid</Value>
       <Value>oeminfo</Value>
       <Value>pageable</Value>
+      <Value>rdata</Value>
     </CollectionProperty>
   </GlobalSettings>
   <Analyzers>

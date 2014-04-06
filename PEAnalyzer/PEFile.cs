@@ -16,26 +16,59 @@
     {
         #region Fields
 
+        /// <summary>
+        /// The maximum number of bytes in an x86 instruction.
+        /// </summary>
         private const ulong MaxNumberOfBytesInX86Instruction = 15;
 
+        /// <summary>
+        /// A flag indicating whether or not this PE file has a 32-bit header.
+        /// </summary>
         private bool is32BitHeader;
 
+        /// <summary>
+        /// The DOS header of the PE file.
+        /// </summary>
         private IMAGE_DOS_HEADER dosHeader;
 
+        /// <summary>
+        /// A 32-bit version of the NT headers. Check is32BitHeader to determine if this or ntHeaders64 should be used.
+        /// </summary>
         private IMAGE_NT_HEADERS32 ntHeaders32;
 
+        /// <summary>
+        /// A 64-bit version of the NT headers. Check is32BitHeader to determine if this or ntHeaders32 should be used.
+        /// </summary>
         private IMAGE_NT_HEADERS64 ntHeaders64;
 
+        /// <summary>
+        /// A list of the section headers in this PE file.
+        /// </summary>
         private List<IMAGE_SECTION_HEADER> sectionHeaders = new List<IMAGE_SECTION_HEADER>();
 
+        /// <summary>
+        /// The byte array representing the code segment.
+        /// </summary>
         private byte[] code;
 
+        /// <summary>
+        /// The byte array representing the .idata section.
+        /// </summary>
         private byte[] idata;
 
+        /// <summary>
+        /// The byte array representing the .rdata section.
+        /// </summary>
         private byte[] rdata;
 
+        /// <summary>
+        /// The number of bytes used for aligning functions on byte alignment boundaries.
+        /// </summary>
         private ulong functionByteAlignment;
 
+        /// <summary>
+        /// The bytes used for aligning functions and data against alignment boundaries.
+        /// </summary>
         private byte[] alignmentBytes = new byte[] { 0x90, 0xcc };
 
         #endregion
