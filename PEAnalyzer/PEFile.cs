@@ -16,7 +16,7 @@
     {
         #region Fields
 
-        private const ulong MAX_NUMBER_OF_BYTES_IN_X86_INSTRUCTION = 15;
+        private const ulong MaxNumberOfBytesInX86Instruction = 15;
 
         private bool is32BitHeader;
 
@@ -723,7 +723,7 @@
                             // instruction. If the first instruction of the disassembled instruction list crosses the
                             // byte boundary, then mark the code chunk for merging.
                             ulong possibleInstructionAddress = lastInstruction.Address + lastInstruction.NumBytes;
-                            byte[] possibleInstructionBytes = new byte[PEFile.MAX_NUMBER_OF_BYTES_IN_X86_INSTRUCTION];
+                            byte[] possibleInstructionBytes = new byte[PEFile.MaxNumberOfBytesInX86Instruction];
 
                             // Calculate the offset of the possible instruction for the current code chunk.
                             ulong possibleInstructionCodeChunkOffset =
