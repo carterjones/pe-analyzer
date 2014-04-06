@@ -101,7 +101,7 @@
                 uint ntHeadersSignature = br.ReadUInt32();
                 IMAGE_FILE_HEADER fileHeader = ReadToStruct<IMAGE_FILE_HEADER>(br);
                 fs.Seek(this.dosHeader.e_lfanew, SeekOrigin.Begin);
-                this.is32BitHeader = fileHeader.Characteristics == IFHCharacteristics.IMAGE_FILE_32BIT_MACHINE;
+                this.is32BitHeader = fileHeader.Characteristics.HasFlag(IFHCharacteristics.IMAGE_FILE_32BIT_MACHINE);
                 if (this.is32BitHeader)
                 {
                     this.ntHeaders32 = ReadToStruct<IMAGE_NT_HEADERS32>(br);
