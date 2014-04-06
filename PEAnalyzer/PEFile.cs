@@ -661,79 +661,6 @@
 
         #endregion
 
-        #region Properties
-
-        public ulong ImageBase
-        {
-            get
-            {
-                return this.is32BitHeader ? this.optionalHeader32.ImageBase : this.optionalHeader64.ImageBase;
-            }
-        }
-
-        public uint BaseOfCodeInMemory
-        {
-            get
-            {
-                return this.is32BitHeader ? this.optionalHeader32.BaseOfCode : this.optionalHeader64.BaseOfCode;
-            }
-        }
-
-        public uint SizeOfCode
-        {
-            get
-            {
-                return this.is32BitHeader ? this.optionalHeader32.SizeOfCode : this.optionalHeader64.SizeOfCode;
-            }
-        }
-
-        public uint BaseOfCodeInFile
-        {
-            get
-            {
-                return this.sectionHeaders.FirstOrDefault(x => x.Section.StartsWith(".text")).PointerToRawData;
-            }
-        }
-
-        public HashSet<BasicBlock> BasicBlocks { get; private set; }
-
-        public HashSet<DataChunk> DataChunks { get; private set; }
-
-        public HashSet<ulong> AddressesOfFunctionsThatEventuallyStopExecution { get; private set; }
-
-        private uint NumberOfSections
-        {
-            get
-            {
-                if (this.is32BitHeader)
-                {
-                    return this.ntHeaders32.FileHeader.NumberOfSections;
-                }
-                else
-                {
-                    return this.ntHeaders64.FileHeader.NumberOfSections;
-                }
-            }
-        }
-
-        private IMAGE_OPTIONAL_HEADER32 optionalHeader32
-        {
-            get
-            {
-                return this.ntHeaders32.OptionalHeader;
-            }
-        }
-
-        private IMAGE_OPTIONAL_HEADER64 optionalHeader64
-        {
-            get
-            {
-                return this.ntHeaders64.OptionalHeader;
-            }
-        }
-
-        #endregion Properties
-
         #region Constructors
 
         /// <summary>
@@ -810,6 +737,79 @@
         }
 
         #endregion
+
+        #region Properties
+
+        public ulong ImageBase
+        {
+            get
+            {
+                return this.is32BitHeader ? this.optionalHeader32.ImageBase : this.optionalHeader64.ImageBase;
+            }
+        }
+
+        public uint BaseOfCodeInMemory
+        {
+            get
+            {
+                return this.is32BitHeader ? this.optionalHeader32.BaseOfCode : this.optionalHeader64.BaseOfCode;
+            }
+        }
+
+        public uint SizeOfCode
+        {
+            get
+            {
+                return this.is32BitHeader ? this.optionalHeader32.SizeOfCode : this.optionalHeader64.SizeOfCode;
+            }
+        }
+
+        public uint BaseOfCodeInFile
+        {
+            get
+            {
+                return this.sectionHeaders.FirstOrDefault(x => x.Section.StartsWith(".text")).PointerToRawData;
+            }
+        }
+
+        public HashSet<BasicBlock> BasicBlocks { get; private set; }
+
+        public HashSet<DataChunk> DataChunks { get; private set; }
+
+        public HashSet<ulong> AddressesOfFunctionsThatEventuallyStopExecution { get; private set; }
+
+        private uint NumberOfSections
+        {
+            get
+            {
+                if (this.is32BitHeader)
+                {
+                    return this.ntHeaders32.FileHeader.NumberOfSections;
+                }
+                else
+                {
+                    return this.ntHeaders64.FileHeader.NumberOfSections;
+                }
+            }
+        }
+
+        private IMAGE_OPTIONAL_HEADER32 optionalHeader32
+        {
+            get
+            {
+                return this.ntHeaders32.OptionalHeader;
+            }
+        }
+
+        private IMAGE_OPTIONAL_HEADER64 optionalHeader64
+        {
+            get
+            {
+                return this.ntHeaders64.OptionalHeader;
+            }
+        }
+
+        #endregion Properties
 
         #region Methods
 
@@ -1525,12 +1525,6 @@
 
         public class CodeChunk
         {
-            public ulong Offset { get; protected set; }
-
-            public byte[] Code { get; protected set; }
-
-            public bool EndsOnAlignmentBoundary { get; protected set; }
-
             public CodeChunk()
             {
                 this.Offset = ulong.MaxValue;
@@ -1544,6 +1538,12 @@
                 this.Code = new byte[length];
                 this.EndsOnAlignmentBoundary = endsOnAlignmentBoundary;
             }
+
+            public ulong Offset { get; protected set; }
+
+            public byte[] Code { get; protected set; }
+
+            public bool EndsOnAlignmentBoundary { get; protected set; }
         }
 
         private class AlignmentByteSequence
