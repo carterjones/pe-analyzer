@@ -16,17 +16,41 @@
         #region Fields
 
         private const ulong MAX_NUMBER_OF_BYTES_IN_X86_INSTRUCTION = 15;
+
         private bool is32BitHeader;
+
         private IMAGE_DOS_HEADER dosHeader;
+
         private IMAGE_NT_HEADERS32 ntHeaders32;
+
         private IMAGE_NT_HEADERS64 ntHeaders64;
-        private IMAGE_OPTIONAL_HEADER32 optionalHeader32 { get { return ntHeaders32.OptionalHeader; } }
-        private IMAGE_OPTIONAL_HEADER64 optionalHeader64 { get { return ntHeaders64.OptionalHeader; } }
+
+        private IMAGE_OPTIONAL_HEADER32 optionalHeader32
+        {
+            get
+            {
+                return ntHeaders32.OptionalHeader;
+            }
+        }
+
+        private IMAGE_OPTIONAL_HEADER64 optionalHeader64
+        {
+            get
+            {
+                return ntHeaders64.OptionalHeader;
+            }
+        }
+
         private List<IMAGE_SECTION_HEADER> sectionHeaders = new List<IMAGE_SECTION_HEADER>();
+
         private byte[] code;
+
         private byte[] idata;
+
         private byte[] rdata;
+
         private ulong functionByteAlignment;
+
         byte[] alignmentBytes = new byte[] { 0x90, 0xcc };
 
         #endregion
