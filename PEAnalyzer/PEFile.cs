@@ -542,14 +542,8 @@
         {
             get
             {
-                if (this.is32BitHeader)
-                {
-                    return this.ntHeaders32.FileHeader.NumberOfSections;
-                }
-                else
-                {
-                    return this.ntHeaders64.FileHeader.NumberOfSections;
-                }
+                return this.is32BitHeader ?
+                    this.ntHeaders32.FileHeader.NumberOfSections : this.ntHeaders64.FileHeader.NumberOfSections;
             }
         }
 
