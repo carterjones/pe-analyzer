@@ -1151,28 +1151,103 @@
         [StructLayout(LayoutKind.Sequential)]
         public struct IMAGE_DOS_HEADER
         {
+            /// <summary>
+            /// Magic number
+            /// </summary>
             [MarshalAs(UnmanagedType.ByValArray, SizeConst = 2)]
-            public char[] e_magic;       // Magic number
-            public ushort e_cblp;        // Bytes on last page of file
-            public ushort e_cp;          // Pages in file
-            public ushort e_crlc;        // Relocations
-            public ushort e_cparhdr;     // Size of header in paragraphs
-            public ushort e_minalloc;    // Minimum extra paragraphs needed
-            public ushort e_maxalloc;    // Maximum extra paragraphs needed
-            public ushort e_ss;          // Initial (relative) SS value
-            public ushort e_sp;          // Initial SP value
-            public ushort e_csum;        // Checksum
-            public ushort e_ip;          // Initial IP value
-            public ushort e_cs;          // Initial (relative) CS value
-            public ushort e_lfarlc;      // File address of relocation table
-            public ushort e_ovno;        // Overlay number
+            public char[] e_magic;
+
+            /// <summary>
+            /// Bytes on last page of file
+            /// </summary>
+            public ushort e_cblp;
+
+            /// <summary>
+            /// Pages in file
+            /// </summary>
+            public ushort e_cp;
+
+            /// <summary>
+            /// Relocations
+            /// </summary>
+            public ushort e_crlc;
+
+            /// <summary>
+            /// Size of header in paragraphs
+            /// </summary>
+            public ushort e_cparhdr;
+
+            /// <summary>
+            /// Minimum extra paragraphs needed
+            /// </summary>
+            public ushort e_minalloc;
+
+            /// <summary>
+            /// Maximum extra paragraphs needed
+            /// </summary>
+            public ushort e_maxalloc;
+
+            /// <summary>
+            /// Initial (relative) SS value
+            /// </summary>
+            public ushort e_ss;
+
+            /// <summary>
+            /// Initial SP value
+            /// </summary>
+            public ushort e_sp;
+
+            /// <summary>
+            /// Checksum
+            /// </summary>
+            public ushort e_csum;
+
+            /// <summary>
+            /// Initial IP value
+            /// </summary>
+            public ushort e_ip;
+
+            /// <summary>
+            /// Initial (relative) CS value
+            /// </summary>
+            public ushort e_cs;
+
+            /// <summary>
+            /// File address of relocation table
+            /// </summary>
+            public ushort e_lfarlc;
+
+            /// <summary>
+            /// Overlay number
+            /// </summary>
+            public ushort e_ovno;
+
+            /// <summary>
+            /// Reserved words
+            /// </summary>
             [MarshalAs(UnmanagedType.ByValArray, SizeConst = 4)]
-            public ushort[] e_res1;      // Reserved words
-            public ushort e_oemid;       // OEM identifier (for e_oeminfo)
-            public ushort e_oeminfo;     // OEM information; e_oemid specific
+            public ushort[] e_res1;
+
+            /// <summary>
+            /// OEM identifier (for e_oeminfo)
+            /// </summary>
+            public ushort e_oemid;
+
+            /// <summary>
+            /// OEM information; e_oemid specific
+            /// </summary>
+            public ushort e_oeminfo;
+
+            /// <summary>
+            /// Reserved words
+            /// </summary>
             [MarshalAs(UnmanagedType.ByValArray, SizeConst = 10)]
-            public ushort[] e_res2;      // Reserved words
-            public int e_lfanew;         // File address of new exe header
+            public ushort[] e_res2;
+
+            /// <summary>
+            /// File address of new exe header
+            /// </summary>
+            public int e_lfanew;
         }
 
         [StructLayout(LayoutKind.Explicit)]
