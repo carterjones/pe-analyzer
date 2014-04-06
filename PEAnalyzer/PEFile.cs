@@ -1281,7 +1281,7 @@
         [StructLayout(LayoutKind.Sequential)]
         public struct IMAGE_FILE_HEADER
         {
-            public ushort Machine;
+            public MachineType Machine;
             public ushort NumberOfSections;
             public uint TimeDateStamp;
             public uint PointerToSymbolTable;
