@@ -1622,8 +1622,15 @@
 
         #region Classes
 
+        /// <summary>
+        /// Represents a chunk of data in the PE file.
+        /// </summary>
         public class DataChunk : CodeChunk
         {
+            /// <summary>
+            /// Initializes a new instance of the DataChunk class.
+            /// </summary>
+            /// <param name="cc">a CodeChunk from which this DataChunk is derived</param>
             public DataChunk(CodeChunk cc)
             {
                 this.Offset = cc.Offset;
@@ -1631,6 +1638,14 @@
                 this.EndsOnAlignmentBoundary = cc.EndsOnAlignmentBoundary;
             }
 
+            /// <summary>
+            /// Initializes a new instance of the DataChunk class.
+            /// </summary>
+            /// <param name="offset">the offset from the base of the code segment</param>
+            /// <param name="length">the number of bytes in this data chunk</param>
+            /// <param name="endsOnAlignmentBoundary">
+            /// true if the data chunk stops adjacent to a byte alignment boundary
+            /// </param>
             public DataChunk(ulong offset, ulong length, bool endsOnAlignmentBoundary)
             {
                 this.Offset = offset;
@@ -1639,8 +1654,14 @@
             }
         }
 
+        /// <summary>
+        /// Represents an array of bytes of code stored at an offset from the base of the code segment.
+        /// </summary>
         public class CodeChunk
         {
+            /// <summary>
+            /// Initializes a new instance of the CodeChunk class.
+            /// </summary>
             public CodeChunk()
             {
                 this.Offset = ulong.MaxValue;
@@ -1648,6 +1669,14 @@
                 this.EndsOnAlignmentBoundary = false;
             }
 
+            /// <summary>
+            /// Initializes a new instance of the CodeChunk class.
+            /// </summary>
+            /// <param name="offset">the offset from the base of the code segment</param>
+            /// <param name="length">the number of bytes in this code chunk</param>
+            /// <param name="endsOnAlignmentBoundary">
+            /// true if the code chunk stops adjacent to a byte alignment boundary
+            /// </param>
             public CodeChunk(ulong offset, ulong length, bool endsOnAlignmentBoundary)
             {
                 this.Offset = offset;
@@ -1655,10 +1684,19 @@
                 this.EndsOnAlignmentBoundary = endsOnAlignmentBoundary;
             }
 
+            /// <summary>
+            /// Gets or sets the offset from the base of the code segment.
+            /// </summary>
             public ulong Offset { get; protected set; }
 
+            /// <summary>
+            /// Gets or sets the array of bytes in this code chunk.
+            /// </summary>
             public byte[] Code { get; protected set; }
 
+            /// <summary>
+            /// Gets or sets a value indicating whether this code chunk stops adjacent to a byte alignment boundary.
+            /// </summary>
             public bool EndsOnAlignmentBoundary { get; protected set; }
         }
 
