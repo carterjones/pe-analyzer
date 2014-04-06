@@ -1236,7 +1236,7 @@
                             {
                                 // Print debugging information.
                                 ulong firstOffset = codeChunkToMerge.Offset;
-                                ulong expectedSecondOffset = (codeChunkToMerge.Offset + (ulong)codeChunkToMerge.Code.Length + 1);
+                                ulong expectedSecondOffset = codeChunkToMerge.Offset + (ulong)codeChunkToMerge.Code.Length + 1;
                                 ulong actualSecondOffset = cc.Offset;
                                 Console.WriteLine("first offset:           " + firstOffset.ToAddressString64() + " (" + (firstOffset + this.ImageBase + this.BaseOfCodeInMemory).ToAddressString64() + ")");
                                 Console.WriteLine("expected second offset: " + expectedSecondOffset.ToAddressString64() + " (" + (expectedSecondOffset + this.ImageBase + this.BaseOfCodeInMemory).ToAddressString64() + ")");
