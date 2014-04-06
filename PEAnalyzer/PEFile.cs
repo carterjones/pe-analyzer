@@ -432,7 +432,7 @@
 
             public string Section
             {
-                get { return new string(Name); }
+                get { return new string(this.Name); }
             }
         }
 
@@ -720,7 +720,7 @@
         {
             get
             {
-                return ntHeaders32.OptionalHeader;
+                return this.ntHeaders32.OptionalHeader;
             }
         }
 
@@ -728,7 +728,7 @@
         {
             get
             {
-                return ntHeaders64.OptionalHeader;
+                return this.ntHeaders64.OptionalHeader;
             }
         }
 
@@ -753,24 +753,24 @@
                 BinaryReader br = new BinaryReader(fs);
 
                 // Read the DOS header.
-                dosHeader = ReadToStruct<IMAGE_DOS_HEADER>(br);
+                this.dosHeader = ReadToStruct<IMAGE_DOS_HEADER>(br);
 
                 // Place the file stream at the beginning of the NT header.
-                fs.Seek(dosHeader.e_lfanew, SeekOrigin.Begin);
+                fs.Seek(this.dosHeader.e_lfanew, SeekOrigin.Begin);
 
                 // Read the NT header.
                 UInt32 ntHeadersSignature = br.ReadUInt32();
                 IMAGE_FILE_HEADER fileHeader = ReadToStruct<IMAGE_FILE_HEADER>(br);
-                fs.Seek(dosHeader.e_lfanew, SeekOrigin.Begin);
+                fs.Seek(this.dosHeader.e_lfanew, SeekOrigin.Begin);
                 UInt16 IMAGE_FILE_32BIT_MACHINE = 0x0100;
                 this.is32BitHeader = (IMAGE_FILE_32BIT_MACHINE & fileHeader.Characteristics) == IMAGE_FILE_32BIT_MACHINE;
                 if (this.is32BitHeader)
                 {
-                    ntHeaders32 = ReadToStruct<IMAGE_NT_HEADERS32>(br);
+                    this.ntHeaders32 = ReadToStruct<IMAGE_NT_HEADERS32>(br);
                 }
                 else
                 {
-                    ntHeaders64 = ReadToStruct<IMAGE_NT_HEADERS64>(br);
+                    this.ntHeaders64 = ReadToStruct<IMAGE_NT_HEADERS64>(br);
                 }
 
                 // Read the section headers.
@@ -787,11 +787,11 @@
                     // Allocate .idata and .rdata byte arrays.
                     if (this.is32BitHeader)
                     {
-                        this.idata = new byte[ntHeaders32.OptionalHeader.IAT.Size];
+                        this.idata = new byte[this.ntHeaders32.OptionalHeader.IAT.Size];
                     }
                     else
                     {
-                        this.idata = new byte[ntHeaders64.OptionalHeader.IAT.Size];
+                        this.idata = new byte[this.ntHeaders64.OptionalHeader.IAT.Size];
                     }
 
                     this.rdata = new byte[rdataSectionHeader.SizeOfRawData - this.idata.Length];
@@ -805,7 +805,7 @@
                 // Read the code segment to a byte array.
                 this.code = new byte[this.SizeOfCode];
                 fs.Seek(this.BaseOfCodeInFile, SeekOrigin.Begin);
-                fs.Read(code, 0, this.code.Length);
+                fs.Read(this.code, 0, this.code.Length);
             }
         }
 
