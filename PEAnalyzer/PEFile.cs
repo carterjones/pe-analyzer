@@ -1141,9 +1141,6 @@
             // Copy from the code segment, so that no bytes are missed between the code chunks.
             Array.Copy(this.code, (long)first.Offset, merged.Code, 0, (long)newCodeLength);
 
-            // Copy the code from the second chunk.
-            Array.Copy(second.Code, 0, merged.Code, first.Code.Length + 1, second.Code.Length);
-
             return merged;
         }
 
