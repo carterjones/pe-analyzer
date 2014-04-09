@@ -304,6 +304,31 @@
             }
         }
 
+        /// <summary>
+        /// Returns a pre-computed hash code that uniquely identifies this instruction.
+        /// </summary>
+        /// <returns>a hash code that uniquely identifies this instruction</returns>
+        public override int GetHashCode()
+        {
+            return this.Address.GetHashCode();
+        }
+
+        /// <summary>
+        /// Determines whether the specified object is equal to the current Instruction object.
+        /// </summary>
+        /// <param name="obj">The object to compare with the current Instruction object.</param>
+        /// <returns>true if the specified object is equal to the current object; otherwise, false</returns>
+        public override bool Equals(object obj)
+        {
+            if (obj == null || obj.GetType() != this.GetType())
+            {
+                return false;
+            }
+
+            Instruction i = (Instruction)obj;
+            return i.Address == this.Address;
+        }
+
         #endregion
     }
 }

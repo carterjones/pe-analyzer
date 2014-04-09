@@ -4,6 +4,9 @@
     using System.Collections.Generic;
     using System.Linq;
     using System.Text;
+    using BeaEngineCS;
+    
+    using Inst = BeaEngineCS.BeaEngine._Disasm;
 
     /// <summary>
     /// Represents a basic block of instructions, containing at most one branching instruction at the end of the block.
@@ -29,8 +32,8 @@
             this.hashCode = this.FirstInstructionAddress.GetHashCode();
             this.PreviousBasicBlocks = new HashSet<BasicBlock>();
             this.NextBasicBlocks = new HashSet<BasicBlock>();
-            this.Instructions = new List<Instruction>();
-            this.CalledBy = new HashSet<Instruction>();
+            this.Instructions = new List<Inst>();
+            this.CalledBy = new HashSet<Inst>();
         }
 
         #endregion
@@ -50,7 +53,7 @@
         /// <summary>
         /// Gets a set of instructions that call this basic block.
         /// </summary>
-        public HashSet<Instruction> CalledBy { get; private set; }
+        public HashSet<Inst> CalledBy { get; private set; }
 
         /// <summary>
         /// Gets or sets the address of the first instruction of this basic block.
@@ -66,7 +69,7 @@
         /// <summary>
         /// Gets the list of instructions within this basic block.
         /// </summary>
-        public List<Instruction> Instructions { get; private set; }
+        public List<Inst> Instructions { get; private set; }
 
         #endregion
 

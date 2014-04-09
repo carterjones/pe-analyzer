@@ -1,5 +1,16 @@
 ﻿namespace PEAnalyzer
 {
+    // possible new approach:
+    //
+    // go to start of code segment
+    // pos_refs  = look for reference arrays
+    // pos_align = look for byte alignment sequences that are tangent to alignment boundaries
+    // for all alignment sequences:
+    //   dis_insts = disassemble instructions until next pos_ref or pos_align
+    //   for each dis_inst in dis_insts:
+    //     if dis_inst.last_inst crosses the beginning of another first inst or touches it perfectly:
+    //       combine instruction lists
+
     using System;
     using System.Collections.Generic;
     using System.Diagnostics.CodeAnalysis;
@@ -579,6 +590,9 @@
         /// Searches for basic blocks in the code segment of this PE file.
         /// </summary>
         /// <returns>a collection of basic blocks that exist in the code segment of this PE file</returns>
+        /// <remarks>
+        /// TODO: add basic blocks for instructions that follow an instruction that causes the program to exit. note: bytes following exiting function could be alignment bytes, even if it is not on an alignment boundary (eg: 0x004C48B1)
+        /// </remarks>
         public Dictionary<ulong, BasicBlock> FindBasicBlocks()
         {
             // Get the aligment byte sequences, so that aligment bytes are not interpreted as code.
@@ -606,8 +620,8 @@
                 // Calculate the virtual address base of this code chunk.
                 ulong virtualAddressBase = this.ImageBase + this.BaseOfCodeInMemory + cc.Offset;
 
-                // Look for a reference array that starts within the first 20 bytes. If one is found, then this is
-                // likely a data chunk.
+                // Look for a reference array that starts within the first 20 bytes. If one is found, then at least
+                // the first part likely a data chunk.
                 ulong? referenceArrayOffset = this.FindReferenceArray(cc.Code);
                 if (referenceArrayOffset != null && (ulong)referenceArrayOffset < 20)
                 {
@@ -713,9 +727,25 @@
                             throw new Exception("A code chunk has not been properly merged.");
                         }
 
-                        // Stage this code chunk for merging.
-                        codeChunkToMerge = cc;
-                        continue;
+                        // Look for Data chunks at the end of the code chunk.
+                        ulong? offsetOfData = this.FindReferenceArray(cc.Code);
+                        if (offsetOfData != null)
+                        {
+                            ulong dataLength = (ulong)cc.Code.Length - (ulong)offsetOfData;
+                            ulong addressOfData = (ulong)offsetOfData + cc.Offset + this.BaseOfCodeInMemory + this.ImageBase;
+                            DataChunk dc = new DataChunk((ulong)offsetOfData, dataLength, true);
+                            Array.Copy(this.code, (long)offsetOfData, dc.Code, 0, (long)dataLength);
+                            this.DataChunks.Add(dc);
+                            
+                            // Only use the instructions that occur before the data chunk starts.
+                            codeChunkInstructions = codeChunkInstructions.Where(x => x.Address < addressOfData).ToList();
+                        }
+                        else
+                        {
+                            // Stage this code chunk for merging.
+                            codeChunkToMerge = cc;
+                            continue;
+                        }
                     }
                     else
                     {
@@ -841,32 +871,26 @@
                     }
                 }
 
-                // If the last instruction has some type of flow control, then it is likely that this code chunk
-                // was filled with valid code. Add all basic blocks from the disassembled list of instructions.
-                this.AddBasicBlocksFromInstructions(basicBlocks, codeChunkInstructions);
-
                 // Add instructions to the global list of instructions.
                 instructions.AddRange(codeChunkInstructions);
             }
 
-            // Iterate through all the verified valid instructions and add them to their respective basic blocks.
-            BasicBlock currentBasicBlock = null;
-            foreach (Instruction i in instructions)
+            // Create a collection of basic blocks from the discovered instructions.
+            this.CreateBasicBlocksFromInstructions(basicBlocks, instructions);
+
+            // See if any basic blocks do not contain instructions.
+            HashSet<BasicBlock> emptyBlocks = new HashSet<BasicBlock>(basicBlocks.Values
+                .Where(x => x.Instructions.Count == 0));
+
+            int numEmptyBlocks = emptyBlocks.Count;
+
+            // Verify all the basic blocks have instructions.
+            foreach (BasicBlock bb in basicBlocks.Values)
             {
-                if (basicBlocks.ContainsKey(i.Address))
+                if (bb.Instructions.Count == 0)
                 {
-                    currentBasicBlock = basicBlocks[i.Address];
+                    throw new Exception("The current basic block contains no instructions.");
                 }
-
-                // Link the next and previous blocks to this basic block if last instruction has a branch target to
-                // the first instruction in this basic block.
-                if (currentBasicBlock.FirstInstructionAddress == i.BranchTarget)
-                {
-                    currentBasicBlock.NextBasicBlocks.Add(currentBasicBlock);
-                    currentBasicBlock.PreviousBasicBlocks.Add(currentBasicBlock);
-                }
-
-                currentBasicBlock.Instructions.Add(i);
             }
 
             // Set the global basic block collection equal to the local collection.
@@ -874,6 +898,90 @@
 
             // Return the discovered basic blocks.
             return this.BasicBlocks;
+        }
+
+        public Dictionary<ulong, Function> CreateFunctions()
+        {
+            Dictionary<ulong, Function> functions = new Dictionary<ulong, Function>();
+            Dictionary<ulong, BasicBlock> remainingBlocks = new Dictionary<ulong, BasicBlock>(this.BasicBlocks);
+
+            while (remainingBlocks.Count != 0)
+            {
+                // Special function at 0x402210 has two entry points. Need to find all parents and choose the basic
+                // block with the lowest value as the entry point for the function.
+
+                // Choose a basic block to start the analysis.
+                BasicBlock firstAvailableBlock = remainingBlocks.First().Value;
+
+                // Find a parent basic block that has no parents.
+                HashSet<BasicBlock> connectedBlocks = PEFile.FindAllConnectedBasicBlocks(firstAvailableBlock);
+
+                // TODO: figure out why basic blocks are not always properly connected.
+                if (firstAvailableBlock.FirstInstructionAddress == 0x004C1812)
+                {
+                    Console.WriteLine();
+                }
+
+                // Create a new function.
+                Function f = new Function(connectedBlocks.Min(x => x.FirstInstructionAddress));
+
+                if (f.FirstInstructionAddress == 0x402360) // Loop function
+                {
+                    Console.WriteLine();
+                }
+
+                // Add this basic block to it and remove it from the remaining blocks.
+                foreach (BasicBlock bb in connectedBlocks)
+                {
+                    f.BasicBlocks.Add(bb.FirstInstructionAddress, bb);
+                    remainingBlocks.Remove(bb.FirstInstructionAddress);
+                }
+            }
+
+            return functions;
+        }
+
+        private static HashSet<BasicBlock> FindAllConnectedBasicBlocks(BasicBlock bb)
+        {
+            // Look for connected blocks.
+            HashSet<BasicBlock> connectedBlocks = new HashSet<BasicBlock>();
+            HashSet<BasicBlock> addedBlocks = new HashSet<BasicBlock>();
+            addedBlocks.Add(bb);
+            while (addedBlocks.Count > 0)
+            {
+                // Add the newly discovered connected basic blocks.
+                connectedBlocks.UnionWith(addedBlocks);
+
+                // Clear the set of newly discovered connected basic blocks.
+                addedBlocks = new HashSet<BasicBlock>();
+
+                // Iterate over the current set of connected blocks, looking for more connected blocks.
+                foreach (BasicBlock connectedBlock in connectedBlocks)
+                {
+                    foreach (BasicBlock nextBlock in connectedBlock.NextBasicBlocks)
+                    {
+                        if (!connectedBlocks.Contains(nextBlock))
+                        {
+                            addedBlocks.Add(nextBlock);
+                        }
+                    }
+
+                    foreach (BasicBlock previousBlock in connectedBlock.PreviousBasicBlocks)
+                    {
+                        if (previousBlock.FirstInstructionAddress == 0x00000000004c1800)
+                        {
+                            Console.WriteLine();
+                        }
+
+                        if (!connectedBlocks.Contains(previousBlock))
+                        {
+                            addedBlocks.Add(previousBlock);
+                        }
+                    }
+                }
+            }
+
+            return connectedBlocks;
         }
 
         /// <summary>
@@ -1022,26 +1130,19 @@
         }
 
         /// <summary>
-        /// Checks to see if a basic block at the provided address exists. If it does, the existing basic block is
-        /// returned. If it does not exist, then a new basic block is created and returned.
+        /// Checks to see if a basic block at the provided address exists. If it does not exist, then a new basic
+        /// block is created.
         /// </summary>
         /// <param name="basicBlocks">a collection of pre-existing basic blocks</param>
         /// <param name="address">the address of an existing or new basic block</param>
-        /// <returns>a basic block at the specified address</returns>
-        private BasicBlock GetBasicBlockOrCreateNewBasicBlock(Dictionary<ulong, BasicBlock> basicBlocks, ulong address)
+        private void CreateNewBasicBlock(Dictionary<ulong, BasicBlock> basicBlocks, ulong address)
         {
             // See if the basic block already exists.
-            if (basicBlocks.ContainsKey(address))
+            if (!basicBlocks.ContainsKey(address))
             {
-                // If it already exists, then return it.
-                return basicBlocks[address];
-            }
-            else
-            {
-                // Otherwise, create a new basic block, add it, and return it.
+                // If does not exist, create a new basic block and add it to the collection of basic blocks.
                 BasicBlock bb = new BasicBlock(address);
                 basicBlocks[address] = bb;
-                return bb;
             }
         }
 
@@ -1050,72 +1151,134 @@
         /// </summary>
         /// <param name="basicBlocks">a pre-existing collection of basic blocks to be expanded</param>
         /// <param name="instructions">a collection of instructions to be added to basic blocks</param>
-        private void AddBasicBlocksFromInstructions(Dictionary<ulong, BasicBlock> basicBlocks, List<Instruction> instructions)
+        private void CreateBasicBlocksFromInstructions(Dictionary<ulong, BasicBlock> basicBlocks, List<Instruction> instructions)
         {
-            // Start the first basic block.
-            BasicBlock bb = null;
-            BasicBlock previousBasicBlock = null;
+            // Sort the instructions.
+            instructions = instructions.OrderBy(x => x.Address).ToList();
 
-            // Set the first basic block to start with the first instruction in the instruction list.
+            // Create a basic block for the first instruction.
             if (instructions.Count > 0)
             {
-                bb = this.GetBasicBlockOrCreateNewBasicBlock(basicBlocks, instructions.First().Address);
+                this.CreateNewBasicBlock(basicBlocks, instructions.First().Address);
             }
             else
             {
                 return;
             }
 
-            // Iterate through the instructions, adding to the current basic block and making new basic blocks as
-            // necessary.
-            bool lastInstructionWasConditionalBranch = false;
+            // Gather instructions from data chunks.
+            this.AddInstructionsAndBasicBlocksFromDataChunks(basicBlocks, instructions);
+
+            // Iterate through the instructions, creating basic blocks, but not adding instructions.
+            ulong fallThroughInstructionAddress = 0;
+            ulong nextExpectedAddress = ulong.MaxValue;
             foreach (Instruction i in instructions)
             {
-                // Make a basic block for the instruction following a conditional branch.
-                if (lastInstructionWasConditionalBranch)
+                if (i.Address == fallThroughInstructionAddress)
                 {
-                    // Reset the flag.
-                    lastInstructionWasConditionalBranch = false;
-
-                    // Get the next basic block or create a new basic block.
-                    previousBasicBlock = bb;
-                    bb = this.GetBasicBlockOrCreateNewBasicBlock(basicBlocks, i.Address);
-
-                    // Link the previous and current basic blocks.
-                    previousBasicBlock.NextBasicBlocks.Add(bb);
-                    bb.PreviousBasicBlocks.Add(previousBasicBlock);
+                    // Create a new block for fall-through instructions.
+                    this.CreateNewBasicBlock(basicBlocks, i.Address);
                 }
 
-                if (i.FlowType == Instruction.ControlFlow.Call ||
-                    i.FlowType == Instruction.ControlFlow.ConditionalBranch ||
-                    i.FlowType == Instruction.ControlFlow.UnconditionalBranch)
+                if (i.Address > nextExpectedAddress)
                 {
-                    // Add a new basic block, based on the branch target, if it is not null. Start a new basic block.
-                    if (i.BranchTarget != 0)
-                    {
-                        BasicBlock branchBlock = this.GetBasicBlockOrCreateNewBasicBlock(basicBlocks, i.BranchTarget);
+                    // Create basic blocks for instructions that follow a gap in the instruction list, which indicate
+                    // an instruction that is starting on a byte alignment boundary.
+                    this.CreateNewBasicBlock(basicBlocks, i.Address);
+                }
 
-                        if (i.FlowType == Instruction.ControlFlow.Call)
-                        {
-                            // Add the current instruction to the list of instructions that call the basic block
-                            // located at the branch target.
-                            branchBlock.CalledBy.Add(i);
-                        }
-                        else
-                        {
-                            // Link to the basic block located at the branch target.
-                            bb.NextBasicBlocks.Add(branchBlock);
-                            branchBlock.PreviousBasicBlocks.Add(bb);
-                        }
-                    }
+                if (i.BranchTarget != 0 &&
+                    (i.FlowType == Instruction.ControlFlow.Call ||
+                     i.FlowType == Instruction.ControlFlow.ConditionalBranch ||
+                     i.FlowType == Instruction.ControlFlow.UnconditionalBranch))
+                {
+                    // Add a new basic block based on the branch target.
+                    this.CreateNewBasicBlock(basicBlocks, i.BranchTarget);
 
-                    // Set a flag so that the next instruction has a basic block created for it.
+                    // If the branch is conditional, set the fall through instruction address.
                     if (i.FlowType == Instruction.ControlFlow.ConditionalBranch)
                     {
-                        lastInstructionWasConditionalBranch = true;
+                        fallThroughInstructionAddress = i.Address + i.NumBytes;
+                    }
+                }
+
+                // Set the next expected address.
+                nextExpectedAddress = i.Address + i.NumBytes;
+            }
+
+            // Add instructions to the basic blocks.
+            BasicBlock currentBasicBlock = null;
+            foreach (Instruction i in instructions)
+            {
+                // See if a basic block starts at this instruction's address.
+                if (basicBlocks.ContainsKey(i.Address))
+                {
+                    // If so, move to that basic block.
+                    currentBasicBlock = basicBlocks[i.Address];
+                }
+
+                // Add the current instruction to the current basic block.
+                currentBasicBlock.Instructions.Add(i);
+            }
+        }
+
+        private void AddInstructionsAndBasicBlocksFromDataChunks(
+            Dictionary<ulong, BasicBlock> basicBlocks, List<Instruction> instructions)
+        {
+            // Gather references.
+            HashSet<DiscoveredReference> references = new HashSet<DiscoveredReference>();
+            foreach (Instruction i in instructions.Where(x => x.BranchTarget != 0))
+            {
+                references.Add(new DiscoveredReference(i.Address, i.BranchTarget));
+            }
+
+            List<ulong> referencedAddresses = references.Select(x => x.ReferencedAddress).Distinct().OrderBy(x => x).ToList();
+
+            Disassembler d = new Disassembler();
+            d.Engine = Disassembler.InternalDisassembler.BeaEngine;
+            d.TargetArchitecture = this.is32BitHeader ? Disassembler.Architecture.x86_32 : Disassembler.Architecture.x86_64;
+            HashSet<Instruction> newInstructions = new HashSet<Instruction>();
+
+            // See if any addresses inside data chunks are referenced by valid instructions.
+            foreach (DataChunk dc in new HashSet<DataChunk>(this.DataChunks))
+            {
+                // Iterate over all the referenced addresses.
+                foreach (ulong referencedAddress in referencedAddresses)
+                {
+                    // See if the data chunk spans the referenced address.
+                    if (this.DataChunkSpansAddress(dc, referencedAddress))
+                    {
+                        // Disassemble the instructions at the referenced address until the end of the data chunk.
+                        ulong codeOffset = referencedAddress - this.BaseOfCodeInMemory - this.ImageBase;
+                        ulong codeOffsetDataOffsetDifference = codeOffset - dc.Offset;
+                        ulong codeLength = (ulong)dc.Code.Length - codeOffsetDataOffsetDifference;
+                        byte[] codeInDataChunk = new byte[codeLength];
+                        Array.Copy(this.code, (long)codeOffset, codeInDataChunk, 0, (long)codeLength);
+                        foreach (Instruction i in d.DisassembleInstructions(codeInDataChunk, referencedAddress))
+                        {
+                            newInstructions.Add(i);
+                        }
+
+                        // Make a new shortened data chunk.
+                        byte[] newCodeInDataChunk = new byte[codeOffsetDataOffsetDifference];
+                        Array.Copy(dc.Code, newCodeInDataChunk, (long)codeOffsetDataOffsetDifference);
+                        DataChunk newDataChunk = new DataChunk(dc.Offset, codeOffsetDataOffsetDifference, dc.EndsOnAlignmentBoundary);
+                        Array.Copy(newCodeInDataChunk, newDataChunk.Code, (long)codeOffsetDataOffsetDifference);
+
+                        // Add the new short chunk and remove the long data chunk.
+                        this.DataChunks.Remove(dc);
+                        this.DataChunks.Add(newDataChunk);
+
+                        // Move to the next data chunk.
+                        break;
                     }
                 }
             }
+
+            // Calculate basic blocks from the new instructions.
+            this.CreateBasicBlocksFromInstructions(basicBlocks, newInstructions.OrderBy(x => x.Address).ToList());
+
+            Console.WriteLine();
         }
 
         /// <summary>
@@ -1257,8 +1420,7 @@
                 {
                     // Add the reference if it matches one of the instructions.
                     ulong address = dataVirtualBaseAddress + (ulong)i;
-                    DiscoveredReference dr = new DiscoveredReference(address, addressSize);
-                    Array.Copy(addressBytes, dr.ReferencedAddressAsRawBytes, addressSize);
+                    DiscoveredReference dr = new DiscoveredReference(address, addressBytes);
                     discoveredReferences.Add(dr);
 
                     // Increment the index by the address size - 1.
@@ -1267,6 +1429,13 @@
             }
 
             return discoveredReferences;
+        }
+
+        private bool DataChunkSpansAddress(DataChunk dc, ulong address)
+        {
+            ulong virtualAddressBase = dc.Offset + this.BaseOfCodeInMemory + this.ImageBase;
+            ulong virtualAddressEnd = virtualAddressBase + (ulong)dc.Code.Length;
+            return virtualAddressBase <= address && address <= virtualAddressEnd;
         }
 
         #endregion
@@ -1933,16 +2102,25 @@
             /// </summary>
             /// <param name="address">the virtual address at which the reference resides</param>
             /// <param name="addressSize">the number of bytes of the address that is referenced</param>
-            public DiscoveredReference(ulong address, int addressSize)
+            public DiscoveredReference(ulong address, byte[] referencedAddressBytes)
             {
                 this.Address = address;
-                this.ReferencedAddressAsRawBytes = new byte[addressSize];
+
+                if (referencedAddressBytes.Length == 4)
+                {
+                    this.ReferencedAddress = BitConverter.ToUInt32(referencedAddressBytes, 0);
+                }
+                else
+                {
+                    this.ReferencedAddress += BitConverter.ToUInt64(referencedAddressBytes, 0);
+                }
             }
 
-            /// <summary>
-            /// Gets the referenced address as a byte array.
-            /// </summary>
-            public byte[] ReferencedAddressAsRawBytes { get; private set; }
+            public DiscoveredReference(ulong address, ulong referencedAddress)
+            {
+                this.Address = address;
+                this.ReferencedAddress = referencedAddress;
+            }
 
             /// <summary>
             /// Gets the address at which the reference resides.
@@ -1952,23 +2130,7 @@
             /// <summary>
             /// Gets the address that is referenced.
             /// </summary>
-            public ulong ReferencedAddress
-            {
-                get
-                {
-                    ulong address = 0;
-                    if (this.ReferencedAddressAsRawBytes.Length == 4)
-                    {
-                        address += BitConverter.ToUInt32(this.ReferencedAddressAsRawBytes, 0);
-                    }
-                    else
-                    {
-                        address += BitConverter.ToUInt64(this.ReferencedAddressAsRawBytes, 0);
-                    }
-
-                    return address;
-                }
-            }
+            public ulong ReferencedAddress { get; private set; }
         }
 
         #endregion

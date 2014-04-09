@@ -322,7 +322,7 @@
         #region Structures
 
         [StructLayout(LayoutKind.Sequential, Pack = 1)]
-        public struct _Disasm
+        public class _Disasm
         {
             public UIntPtr InstructionPointer;
             public UInt64 VirtualAddr;

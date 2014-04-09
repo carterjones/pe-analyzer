@@ -21,7 +21,9 @@
         {
             string filename = @"D:\inbox\notepad++.exe";
             PEFile pef = new PEFile(filename);
+            pef.FindBasicBlocks2();
             pef.FindBasicBlocks();
+            pef.CreateFunctions();
 
             Console.ReadKey(true);
         }
