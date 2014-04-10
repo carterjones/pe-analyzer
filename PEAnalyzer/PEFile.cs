@@ -102,6 +102,8 @@
         /// </summary>
         private byte[] alignmentBytes = new byte[] { 0x90, 0xcc };
 
+        private ulong firstUnprocessedCodeOffset;
+
         #endregion
 
         #region Enumerations
@@ -577,7 +579,7 @@
         {
             get
             {
-                return !this.byteTypes.Contains(ByteType.Unprocessed);
+                return this.FirstUnprocessedVirtualAddress == null;
             }
         }
 
@@ -585,14 +587,18 @@
         {
             get
             {
-                for (ulong i = 0; i < (ulong)this.byteTypes.Length; ++i)
+                // Scan for an unprocessed byte, starting at the last confirmed unprocessed code offset.
+                for (ulong i = this.firstUnprocessedCodeOffset; i < (ulong)this.code.Length; ++i)
                 {
                     if (this.byteTypes[i] == ByteType.Unprocessed)
                     {
-                        return this.GetVirtualAddressFromCodeOffset(i);
+                        // Return the first discovered unprocessed byte.
+                        this.firstUnprocessedCodeOffset = i;
+                        return this.GetVirtualAddressFromCodeOffset(this.firstUnprocessedCodeOffset);
                     }
                 }
 
+                // Return null if no unprocessed bytes exist.
                 return null;
             }
         }
