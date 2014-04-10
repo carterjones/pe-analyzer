@@ -111,6 +111,7 @@
         private enum ByteType : byte
         {
             Unprocessed = 0,
+            ExpectedInstructionStart,
             InstructionStart,
             InstructionPart,
             AlignmentByte,
@@ -590,7 +591,8 @@
                 // Scan for an unprocessed byte, starting at the last confirmed unprocessed code offset.
                 for (ulong i = this.firstUnprocessedCodeOffset; i < (ulong)this.code.Length; ++i)
                 {
-                    if (this.byteTypes[i] == ByteType.Unprocessed)
+                    if (this.byteTypes[i] == ByteType.Unprocessed ||
+                        this.byteTypes[i] == ByteType.ExpectedInstructionStart)
                     {
                         // Return the first discovered unprocessed byte.
                         this.firstUnprocessedCodeOffset = i;
@@ -600,6 +602,14 @@
 
                 // Return null if no unprocessed bytes exist.
                 return null;
+            }
+        }
+
+        private int AddressSize
+        {
+            get
+            {
+                return this.is32BitHeader ? 4 : 8;
             }
         }
 
@@ -671,27 +681,70 @@
             {
                 currentVirtualAddress = remainingAddresses.First();
                 remainingAddresses.Remove(currentVirtualAddress);
+            }
 
-                // If this address has already been evaluated, then stop disassembling.
-                if (instructions.ContainsKey(currentVirtualAddress))
+            ulong baseCodeOffset = this.GetCodeOffsetFromVirtualAddress(currentVirtualAddress);
+
+            // If this address has already been evaluated, then stop disassembling.
+            if (instructions.ContainsKey(currentVirtualAddress))
+            {
+                // Make sure the byte is marked as the start of an instruction.
+                this.byteTypes[baseCodeOffset] = ByteType.InstructionStart;
+                return;
+            }
+
+            // If this is not a valid address, then stop disassembling.
+            if (!this.IsValidVirtualAddress(currentVirtualAddress))
+            {
+                return;
+            }
+
+            // If this byte is an alignment byte, then mark it as such and stop disassembling.
+            if (this.alignmentBytes.Contains(this.code[baseCodeOffset]))
+            {
+                this.byteTypes[baseCodeOffset] = ByteType.AlignmentByte;
+                return;
+            }
+
+            // If a multi-byte nop exists at this instruction, mark it and stop disassembling.
+            ulong? numNopBytesAtCodeOffset = this.GetNumNopBytesAtCodeOffset(baseCodeOffset);
+            if (numNopBytesAtCodeOffset != null)
+            {
+                this.byteTypes[baseCodeOffset] = ByteType.MultiByteNopStart;
+                for (ulong i = 1; i < (ulong)numNopBytesAtCodeOffset; ++i)
                 {
-                    return;
+                    this.byteTypes[baseCodeOffset + i] = ByteType.MultiByteNopPart;
                 }
 
-                // If this byte is an alignment byte, then mark it as such and stop disassembling.
-                ulong codeOffset = this.GetCodeOffsetFromVirtualAddress(currentVirtualAddress);
-                if (this.alignmentBytes.Contains(this.code[codeOffset]))
-                {
-                    this.byteTypes[codeOffset] = ByteType.AlignmentByte;
-                    return;
-                }
+                return;
+            }
 
-                // If this and the next byte compile to "mov edi, edi", mark it as a multi-byte nop and stop
-                // disassembling.
-                if (this.IsMultiByteNopAtCodeOffset(codeOffset))
+            // If this is a jump table, mark it as such, add the referenced addresses to the collection for analysis,
+            // and return.
+            if (this.byteTypes[baseCodeOffset] == ByteType.Unprocessed)
+            {
+                HashSet<ulong> jumpTableAddresses =
+                    this.GetJumpTableAddresses(this.GetVirtualAddressFromCodeOffset(baseCodeOffset));
+                if (jumpTableAddresses.Count > 1)
                 {
-                    this.byteTypes[codeOffset] = ByteType.MultiByteNopStart;
-                    this.byteTypes[codeOffset + 1] = ByteType.MultiByteNopPart;
+                    int addressSize = this.AddressSize;
+
+                    // Mark the bytes as an entry in a jump table.
+                    for (int i = 0; i < jumpTableAddresses.Count; ++i)
+                    {
+                        ulong addressOffset = (ulong)(i * addressSize) + baseCodeOffset;
+                        this.byteTypes[addressOffset] = ByteType.JumpTableAddressStart;
+                        for (int addressByte = 1; addressByte < addressSize; ++addressByte)
+                        {
+                            this.byteTypes[addressOffset + (ulong)addressByte] = ByteType.JumpTableAddressPart;
+                        }
+                    }
+
+                    foreach (ulong address in jumpTableAddresses)
+                    {
+                        remainingAddresses.Add(address);
+                    }
+
                     return;
                 }
             }
@@ -737,16 +790,23 @@
                         if (i.Instruction.AddrValue != 0)
                         {
                             remainingAddresses.Add(i.Instruction.AddrValue);
+
+                            // Mark the branch target as an expected instruction.
+                            this.MarkVirtualAddressAsExpectedInstruction(i.Instruction.AddrValue);
                         }
                         else
                         {
                             if (i.Argument1.Memory.Displacement != 0)
                             {
-                                HashSet<ulong> jumpTableAddresses =
-                                    this.GetJumpTableAddresses((ulong)i.Argument1.Memory.Displacement);
+                                ulong jumpTableAddress =
+                                    (ulong)(i.Argument1.Memory.Displacement);
+                                HashSet<ulong> jumpTableAddresses = this.GetJumpTableAddresses(jumpTableAddress);
                                 foreach (ulong address in jumpTableAddresses)
                                 {
                                     remainingAddresses.Add(address);
+
+                                    // Mark the jump target as an expected instruction.
+                                    this.MarkVirtualAddressAsExpectedInstruction(address);
                                 }
                             }
                             else if (i.Argument2.Memory.Displacement != 0)
@@ -759,7 +819,7 @@
                             }
                             else
                             {
-                                
+
                             }
                         }
 
@@ -770,6 +830,9 @@
                         if (i.Instruction.AddrValue != 0)
                         {
                             remainingAddresses.Add(i.Instruction.AddrValue);
+
+                            // Mark the branch target as an expected instruction.
+                            this.MarkVirtualAddressAsExpectedInstruction(i.Instruction.AddrValue);
                         }
 
                         break;
@@ -778,6 +841,9 @@
                         if (i.Instruction.AddrValue != 0)
                         {
                             remainingAddresses.Add(i.Instruction.AddrValue);
+
+                            // Mark the branch target as an expected instruction.
+                            this.MarkVirtualAddressAsExpectedInstruction(i.Instruction.AddrValue);
                         }
 
                         break;
@@ -798,7 +864,7 @@
                         // If the next byte is an alignment byte or the next two bytes are a multy-byte nop, add the
                         // code offset to the set of addresses to analyze.
                         if (this.alignmentBytes.Contains(this.code[dataOffset]) ||
-                            this.IsMultiByteNopAtCodeOffset(dataOffset))
+                            this.GetNumNopBytesAtCodeOffset(dataOffset) != null)
                         {
                             remainingAddresses.Add(this.GetVirtualAddressFromCodeOffset(dataOffset));
                             return;
@@ -815,14 +881,53 @@
             }
         }
 
-        private bool IsMultiByteNopAtCodeOffset(ulong codeOffset)
+        private void MarkVirtualAddressAsExpectedInstruction(ulong virtualAddress)
         {
+            ulong codeOffset = this.GetCodeOffsetFromVirtualAddress(virtualAddress);
+            if (this.byteTypes[codeOffset] == ByteType.Unprocessed)
+            {
+                this.byteTypes[codeOffset] = ByteType.ExpectedInstructionStart;
+            }
+            else if (this.byteTypes[codeOffset] == ByteType.ExpectedInstructionStart ||
+                this.byteTypes[codeOffset] == ByteType.InstructionStart)
+            {
+                // Ignore these cases.
+            }
+            else if (this.byteTypes[codeOffset] == ByteType.ArbitraryDataStart ||
+                this.byteTypes[codeOffset] == ByteType.ArbitraryDataPart)
+            {
+                this.byteTypes[codeOffset] = ByteType.ExpectedInstructionStart;
+            }
+            else
+            {
+                ByteType bt = this.byteTypes[codeOffset];
+                Console.WriteLine();
+            }
+        }
+
+        private ulong? GetNumNopBytesAtCodeOffset(ulong codeOffset)
+        {
+            // Check for: mov edi, edi
             if (codeOffset < (ulong)this.code.Length + 1)
             {
-                return this.code[codeOffset] == 0x8B && this.code[codeOffset + 1] == 0xFF;
+                if (this.code[codeOffset] == 0x8B && this.code[codeOffset + 1] == 0xFF)
+                {
+                    return 2;
+                }
             }
 
-            return false;
+            // Check for: lea eax, [eax]
+            if (codeOffset < (ulong)this.code.Length + 2)
+            {
+                if (this.code[codeOffset] == 0x8D &&
+                    this.code[codeOffset + 1] == 0x49 &&
+                    this.code[codeOffset + 2] == 0x00)
+                {
+                    return 3;
+                }
+            }
+
+            return null;
         }
 
         private ulong GetVirtualAddressFromCodeOffset(ulong codeOffset)
@@ -848,14 +953,51 @@
         /// </summary>
         /// <param name="dataVirtualBaseAddress">the virtual address of the data being scanned</param>
         /// <returns>a collection of discovered jump table offsets</returns>
-        private HashSet<ulong> GetJumpTableAddresses(ulong virtualAddress)
+        private HashSet<ulong> GetJumpTableAddresses(ulong virtualAddress, bool isRecursiveCall = false)
         {
-            int addressSize = this.is32BitHeader ? 4 : 8;
+            // If this is not a valid virtual address, return an empty jump table address list.
+            if (!this.IsValidVirtualAddress(virtualAddress))
+            {
+                return new HashSet<ulong>();
+            }
+
+            int addressSize = this.AddressSize;
+            ulong codeOffset = this.GetCodeOffsetFromVirtualAddress(virtualAddress);
+
+            ByteType bt = this.byteTypes[codeOffset];
+
+            // This has been marked as the start of an instruction, so return an empty jump table address list.
+            if (this.byteTypes[codeOffset] == ByteType.InstructionStart ||
+                this.byteTypes[codeOffset] == ByteType.ExpectedInstructionStart)
+            {
+                return new HashSet<ulong>();
+            }
+
+            if (this.byteTypes[codeOffset] == ByteType.InstructionPart)
+            {
+                if (isRecursiveCall)
+                {
+                    // Do not do multiple recursive calls. Simply abort.
+                    return new HashSet<ulong>();
+                }
+                else
+                {
+                    return this.GetJumpTableAddresses(virtualAddress + (ulong)addressSize, true);
+                }
+            }
+
+            if (this.byteTypes[codeOffset] != ByteType.Unprocessed &&
+                this.byteTypes[codeOffset] != ByteType.JumpTableAddressStart &&
+                this.byteTypes[codeOffset] != ByteType.ArbitraryDataStart &&
+                this.byteTypes[codeOffset] != ByteType.ArbitraryDataPart)
+            {
+                Console.WriteLine();
+            }
+
             byte[] addressBytes = new byte[addressSize];
             ulong firstPossibleAddress = this.ImageBase + this.BaseOfCodeInMemory;
             ulong lastPossibleAddress = firstPossibleAddress + (ulong)this.code.Length - (ulong)addressSize;
             HashSet<ulong> jumpTableOffsets = new HashSet<ulong>();
-            ulong codeOffset = this.GetCodeOffsetFromVirtualAddress(virtualAddress);
 
             for (ulong i = codeOffset; i < (ulong)this.code.Length - (ulong)addressSize; ++i)
             {
@@ -863,15 +1005,23 @@
                 Array.Copy(this.code, (long)i, addressBytes, 0, addressSize);
 
                 // Convert the byte array to an address.
-                ulong jumpTableOffset = this.is32BitHeader ? BitConverter.ToUInt32(addressBytes, 0) : BitConverter.ToUInt64(addressBytes, 0);
+                ulong jumpTableEntry = this.is32BitHeader ? BitConverter.ToUInt32(addressBytes, 0) : BitConverter.ToUInt64(addressBytes, 0);
 
                 // Check to see if the jump table address exists within the code address range.
-                if (this.IsValidVirtualAddress(jumpTableOffset))
+                if (this.IsValidVirtualAddress(jumpTableEntry))
                 {
                     // Add the jump table address.
-                    jumpTableOffsets.Add(jumpTableOffset);
+                    jumpTableOffsets.Add(jumpTableEntry);
 
                     // Mark these bytes as jump table offsets.
+                    ByteType bt1 = this.byteTypes[i];
+                    if (this.byteTypes[i] != ByteType.Unprocessed &&
+                        this.byteTypes[i] != ByteType.JumpTableAddressStart &&
+                        this.byteTypes[i] != ByteType.ArbitraryDataStart &&
+                        this.byteTypes[i] != ByteType.ArbitraryDataPart)
+                    {
+                        Console.WriteLine();
+                    }
                     this.byteTypes[i] = ByteType.JumpTableAddressStart;
                     for (int j = 1; j < addressSize; ++j)
                     {
