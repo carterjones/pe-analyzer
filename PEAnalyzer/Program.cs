@@ -6,7 +6,6 @@
     using System.Linq;
     using System.Runtime.InteropServices;
     using System.Text;
-    using Bunseki;
 
     /// <summary>
     /// The main class to be run when the executable is run.
@@ -20,10 +19,21 @@
         public static void Main(string[] args)
         {
             string filename = @"D:\inbox\notepad++.exe";
+            //string filename = @"D:\inbox\MRT.exe";
             PEFile pef = new PEFile(filename);
-            pef.FindBasicBlocks2();
-            pef.FindBasicBlocks();
-            pef.CreateFunctions();
+            Dictionary<ulong, BeaEngineCS.BeaEngine._Disasm> instructions = new Dictionary<ulong, BeaEngineCS.BeaEngine._Disasm>();
+            HashSet<ulong> remainingAddresses = new HashSet<ulong>();
+            HashSet<BasicBlock> basicBlocks = new HashSet<BasicBlock>();
+
+            while (!pef.AllBytesHaveBeenProcessed)
+            {
+                remainingAddresses.Add((ulong)pef.FirstUnprocessedVirtualAddress);
+
+                while (remainingAddresses.Count > 0)
+                {
+                    pef.FindInstructions(instructions, remainingAddresses, basicBlocks);
+                }
+            }
 
             Console.ReadKey(true);
         }

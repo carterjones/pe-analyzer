@@ -1,6 +1,6 @@
 ﻿namespace PEAnalyzer
 {
-    // possible new approach:
+    // possible new approach #1:
     //
     // go to start of code segment
     // pos_refs  = look for reference arrays
@@ -10,6 +10,22 @@
     //   for each dis_inst in dis_insts:
     //     if dis_inst.last_inst crosses the beginning of another first inst or touches it perfectly:
     //       combine instruction lists
+    /*
+     * Possible new approach #2:
+     * pos = start of code segment
+     * bb = null
+     * while pos != end of code segment:
+     *   inst = disassemble one instruction
+     *   if bb == null:
+     *     bb = new basic block starting at inst
+     *   bb.add(inst)
+     *   if inst.flowtype = unconditional branch:
+     *     if inst.branchtarget = 
+     */
+    /*
+     * Possible new approach #3:
+     * http://reverseengineering.stackexchange.com/questions/2347/what-is-the-algorithm-used-in-recursive-traversal-disassembly
+     */
 
     using System;
     using System.Collections.Generic;
@@ -18,7 +34,9 @@
     using System.Linq;
     using System.Runtime.InteropServices;
     using System.Text;
-    using Bunseki;
+    using BeaEngineCS;
+
+    using Disasm = BeaEngineCS.BeaEngine._Disasm;
 
     /// <summary>
     /// Represents a PE file. Contains information about the file and can be used for extracting data from the file.
@@ -72,6 +90,8 @@
         /// </summary>
         private byte[] rdata;
 
+        private ByteType[] byteTypes;
+
         /// <summary>
         /// The number of bytes used for aligning functions on byte alignment boundaries.
         /// </summary>
@@ -81,6 +101,24 @@
         /// The bytes used for aligning functions and data against alignment boundaries.
         /// </summary>
         private byte[] alignmentBytes = new byte[] { 0x90, 0xcc };
+
+        #endregion
+
+        #region Enumerations
+
+        private enum ByteType : byte
+        {
+            Unprocessed = 0,
+            InstructionStart,
+            InstructionPart,
+            AlignmentByte,
+            JumpTableAddressStart,
+            JumpTableAddressPart,
+            MultiByteNopStart,
+            MultiByteNopPart,
+            ArbitraryDataStart,
+            ArbitraryDataPart
+        }
 
         #endregion
 
@@ -94,8 +132,6 @@
         {
             // Initialize properties.
             this.BasicBlocks = new Dictionary<ulong, BasicBlock>();
-            this.DataChunks = new HashSet<DataChunk>();
-            this.AddressesOfFunctionsThatEventuallyStopExecution = new HashSet<ulong>();
 
             // Read in the PE File.
             using (FileStream fs = new FileStream(filePath, FileMode.Open, FileAccess.Read))
@@ -153,6 +189,7 @@
 
                 // Read the code segment to a byte array.
                 this.code = new byte[this.SizeOfCode];
+                this.byteTypes = Enumerable.Repeat(ByteType.Unprocessed, (int)this.SizeOfCode).ToArray();
                 fs.Seek(this.BaseOfCodeInFile, SeekOrigin.Begin);
                 fs.Read(this.code, 0, this.code.Length);
             }
@@ -536,15 +573,29 @@
         /// </summary>
         public Dictionary<ulong, BasicBlock> BasicBlocks { get; private set; }
 
-        /// <summary>
-        /// Gets a collection of data chunks in the PE file, which do not contain any code.
-        /// </summary>
-        public HashSet<DataChunk> DataChunks { get; private set; }
+        public bool AllBytesHaveBeenProcessed
+        {
+            get
+            {
+                return !this.byteTypes.Contains(ByteType.Unprocessed);
+            }
+        }
 
-        /// <summary>
-        /// Gets a collection of addresses of functions that will eventually stop code execution if called.
-        /// </summary>
-        public HashSet<ulong> AddressesOfFunctionsThatEventuallyStopExecution { get; private set; }
+        public ulong? FirstUnprocessedVirtualAddress
+        {
+            get
+            {
+                for (ulong i = 0; i < (ulong)this.byteTypes.Length; ++i)
+                {
+                    if (this.byteTypes[i] == ByteType.Unprocessed)
+                    {
+                        return this.GetVirtualAddressFromCodeOffset(i);
+                    }
+                }
+
+                return null;
+            }
+        }
 
         /// <summary>
         /// Gets the number of sections in the NT file header.
@@ -586,6 +637,254 @@
 
         #region Methods
 
+        public void FindInstructions(Dictionary<ulong, Disasm> instructions, HashSet<ulong> remainingAddresses, HashSet<BasicBlock> basicBlocks)
+        {
+            // Create a new set of instructions if needed.
+            if (instructions == null)
+            {
+                instructions = new Dictionary<ulong, Disasm>();
+            }
+
+            if (remainingAddresses == null)
+            {
+                remainingAddresses = new HashSet<ulong>();
+            }
+
+            if (basicBlocks == null)
+            {
+                basicBlocks = new HashSet<BasicBlock>();
+            }
+
+            // Initialize the current virtual address.
+            ulong currentVirtualAddress = 0;
+            if (remainingAddresses.Count == 0)
+            {
+                currentVirtualAddress = this.BaseOfCodeInMemory + this.ImageBase;
+            }
+            else
+            {
+                currentVirtualAddress = remainingAddresses.First();
+                remainingAddresses.Remove(currentVirtualAddress);
+
+                // If this address has already been evaluated, then stop disassembling.
+                if (instructions.ContainsKey(currentVirtualAddress))
+                {
+                    return;
+                }
+
+                // If this byte is an alignment byte, then mark it as such and stop disassembling.
+                ulong codeOffset = this.GetCodeOffsetFromVirtualAddress(currentVirtualAddress);
+                if (this.alignmentBytes.Contains(this.code[codeOffset]))
+                {
+                    this.byteTypes[codeOffset] = ByteType.AlignmentByte;
+                    return;
+                }
+
+                // If this and the next byte compile to "mov edi, edi", mark it as a multi-byte nop and stop
+                // disassembling.
+                if (this.IsMultiByteNopAtCodeOffset(codeOffset))
+                {
+                    this.byteTypes[codeOffset] = ByteType.MultiByteNopStart;
+                    this.byteTypes[codeOffset + 1] = ByteType.MultiByteNopPart;
+                    return;
+                }
+            }
+
+            // Initialize the disassembler variables.
+            BeaEngine.Architecture arch
+                = this.is32BitHeader ? BeaEngine.Architecture.x86_32 : BeaEngine.Architecture.x86_64;
+
+            bool stopEvaluation = false;
+
+            // Create a new basic block based on the current virtual address.
+            basicBlocks.Add(new BasicBlock(currentVirtualAddress));
+
+            foreach (Disasm i in BeaEngine.Disassemble(this.code, currentVirtualAddress, arch, this.GetCodeOffsetFromVirtualAddress(currentVirtualAddress)))
+            {
+                // If this address has already been evaluated, then stop disassembling.
+                if (instructions.ContainsKey(i.VirtualAddr))
+                {
+                    return;
+                }
+
+                // Add the instruction.
+                instructions.Add(i.VirtualAddr, i);
+
+                // Mark the first byte as the start of an instruction.
+                ulong codeOffset = this.GetCodeOffsetFromVirtualAddress(i.VirtualAddr);
+                this.byteTypes[codeOffset] = ByteType.InstructionStart;
+
+                // Mark each subsequent byte of the instruction as part of an instruction.
+                for (ulong j = 1; j < (ulong)i.Length; ++j)
+                {
+                    this.byteTypes[codeOffset + j] = ByteType.InstructionPart;
+                }
+
+                switch (i.Instruction.BranchType)
+                {
+                    case BeaEngine.BranchType.RetType:
+                        stopEvaluation = true;
+                        break;
+                    case BeaEngine.BranchType.JmpType:
+                        // Move to the target instruction, since no follow through instruction will be hit from this
+                        // instruction.
+                        if (i.Instruction.AddrValue != 0)
+                        {
+                            remainingAddresses.Add(i.Instruction.AddrValue);
+                        }
+                        else
+                        {
+                            if (i.Argument1.Memory.Displacement != 0)
+                            {
+                                HashSet<ulong> jumpTableAddresses =
+                                    this.GetJumpTableAddresses((ulong)i.Argument1.Memory.Displacement);
+                                foreach (ulong address in jumpTableAddresses)
+                                {
+                                    remainingAddresses.Add(address);
+                                }
+                            }
+                            else if (i.Argument2.Memory.Displacement != 0)
+                            {
+                                Console.WriteLine(((ulong)i.Argument2.Memory.Displacement).ToAddressString64());
+                            }
+                            else if (i.Argument3.Memory.Displacement != 0)
+                            {
+                                Console.WriteLine(((ulong)i.Argument3.Memory.Displacement).ToAddressString64());
+                            }
+                            else
+                            {
+                                
+                            }
+                        }
+
+                        stopEvaluation = true;
+                        break;
+                    case BeaEngine.BranchType.CallType:
+                        // Add the called function to the set of addresses to disassemble.
+                        if (i.Instruction.AddrValue != 0)
+                        {
+                            remainingAddresses.Add(i.Instruction.AddrValue);
+                        }
+
+                        break;
+                    default:
+                        // Add the conditional branch target to the set of addresses to disassemble.
+                        if (i.Instruction.AddrValue != 0)
+                        {
+                            remainingAddresses.Add(i.Instruction.AddrValue);
+                        }
+
+                        break;
+                }
+
+                // See if this instruction references memory at a displaced address.
+                if (i.Instruction.Mnemonic.StartsWith("movzx") &&
+                    this.IsValidVirtualAddress((ulong)i.Argument2.Memory.Displacement))
+                {
+                    ulong dataOffset = this.GetCodeOffsetFromVirtualAddress((ulong)i.Argument2.Memory.Displacement);
+
+                    // Mark the byte as the beginning of data.
+                    this.byteTypes[dataOffset] = ByteType.ArbitraryDataStart;
+
+                    // Scan until either a single alignment byte or multi-byte nop is hit.
+                    while (++dataOffset < (ulong)this.code.Length)
+                    {
+                        // If the next byte is an alignment byte or the next two bytes are a multy-byte nop, add the
+                        // code offset to the set of addresses to analyze.
+                        if (this.alignmentBytes.Contains(this.code[dataOffset]) ||
+                            this.IsMultiByteNopAtCodeOffset(dataOffset))
+                        {
+                            remainingAddresses.Add(this.GetVirtualAddressFromCodeOffset(dataOffset));
+                            return;
+                        }
+
+                        this.byteTypes[dataOffset] = ByteType.ArbitraryDataPart;
+                    }
+                }
+
+                if (stopEvaluation)
+                {
+                    break;
+                }
+            }
+        }
+
+        private bool IsMultiByteNopAtCodeOffset(ulong codeOffset)
+        {
+            if (codeOffset < (ulong)this.code.Length + 1)
+            {
+                return this.code[codeOffset] == 0x8B && this.code[codeOffset + 1] == 0xFF;
+            }
+
+            return false;
+        }
+
+        private ulong GetVirtualAddressFromCodeOffset(ulong codeOffset)
+        {
+            return codeOffset + this.BaseOfCodeInMemory + this.ImageBase;
+        }
+
+        private ulong GetCodeOffsetFromVirtualAddress(ulong virtualAddress)
+        {
+            return virtualAddress - this.BaseOfCodeInMemory - this.ImageBase;
+        }
+
+        private bool IsValidVirtualAddress(ulong virtualAddress)
+        {
+            int addressSize = this.is32BitHeader ? 4 : 8;
+            ulong firstPossibleAddress = this.ImageBase + this.BaseOfCodeInMemory;
+            ulong lastPossibleAddress = firstPossibleAddress + (ulong)this.code.Length - (ulong)addressSize;
+            return firstPossibleAddress <= virtualAddress && virtualAddress <= lastPossibleAddress;
+        }
+
+        /// <summary>
+        /// Scans data for references to addresses in the code section.
+        /// </summary>
+        /// <param name="dataVirtualBaseAddress">the virtual address of the data being scanned</param>
+        /// <returns>a collection of discovered jump table offsets</returns>
+        private HashSet<ulong> GetJumpTableAddresses(ulong virtualAddress)
+        {
+            int addressSize = this.is32BitHeader ? 4 : 8;
+            byte[] addressBytes = new byte[addressSize];
+            ulong firstPossibleAddress = this.ImageBase + this.BaseOfCodeInMemory;
+            ulong lastPossibleAddress = firstPossibleAddress + (ulong)this.code.Length - (ulong)addressSize;
+            HashSet<ulong> jumpTableOffsets = new HashSet<ulong>();
+            ulong codeOffset = this.GetCodeOffsetFromVirtualAddress(virtualAddress);
+
+            for (ulong i = codeOffset; i < (ulong)this.code.Length - (ulong)addressSize; ++i)
+            {
+                // Copy a byte array to see if it is an address.
+                Array.Copy(this.code, (long)i, addressBytes, 0, addressSize);
+
+                // Convert the byte array to an address.
+                ulong jumpTableOffset = this.is32BitHeader ? BitConverter.ToUInt32(addressBytes, 0) : BitConverter.ToUInt64(addressBytes, 0);
+
+                // Check to see if the jump table address exists within the code address range.
+                if (this.IsValidVirtualAddress(jumpTableOffset))
+                {
+                    // Add the jump table address.
+                    jumpTableOffsets.Add(jumpTableOffset);
+
+                    // Mark these bytes as jump table offsets.
+                    this.byteTypes[i] = ByteType.JumpTableAddressStart;
+                    for (int j = 1; j < addressSize; ++j)
+                    {
+                        this.byteTypes[i + (ulong)j] = ByteType.JumpTableAddressPart;
+                    }
+
+                    // Increment the index by the address size - 1.
+                    i += (ulong)addressSize - 1;
+                }
+                else
+                {
+                    break;
+                }
+            }
+
+            return jumpTableOffsets;
+        }
+
+        /*
         /// <summary>
         /// Searches for basic blocks in the code segment of this PE file.
         /// </summary>
@@ -603,7 +902,6 @@
 
             // Initialize the disassembler.
             Disassembler d = new Disassembler();
-            d.Engine = Disassembler.InternalDisassembler.BeaEngine;
             d.TargetArchitecture = this.is32BitHeader ? Disassembler.Architecture.x86_32 : Disassembler.Architecture.x86_64;
 
             // Initialize tracking variables.
@@ -983,7 +1281,7 @@
 
             return connectedBlocks;
         }
-
+        */
         /// <summary>
         /// Reads in a block from a binary stream and converts it to the struct type specified by the template
         /// parameter.
@@ -1003,7 +1301,7 @@
 
             return theStructure;
         }
-
+        /*
         /// <summary>
         /// Calculates the byte alignment sequences of the code section.
         /// </summary>
@@ -1235,7 +1533,6 @@
             List<ulong> referencedAddresses = references.Select(x => x.ReferencedAddress).Distinct().OrderBy(x => x).ToList();
 
             Disassembler d = new Disassembler();
-            d.Engine = Disassembler.InternalDisassembler.BeaEngine;
             d.TargetArchitecture = this.is32BitHeader ? Disassembler.Architecture.x86_32 : Disassembler.Architecture.x86_64;
             HashSet<Instruction> newInstructions = new HashSet<Instruction>();
 
@@ -1437,7 +1734,7 @@
             ulong virtualAddressEnd = virtualAddressBase + (ulong)dc.Code.Length;
             return virtualAddressBase <= address && address <= virtualAddressEnd;
         }
-
+        */
         #endregion
 
         #region Structures
@@ -1975,7 +2272,7 @@
         #endregion
 
         #region Classes
-
+        /*
         /// <summary>
         /// Represents a chunk of data in the PE file.
         /// </summary>
@@ -2132,7 +2429,7 @@
             /// </summary>
             public ulong ReferencedAddress { get; private set; }
         }
-
+        */
         #endregion
     }
 }
