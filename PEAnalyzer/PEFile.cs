@@ -653,7 +653,7 @@
 
         #region Methods
 
-        public void FindInstructions(Dictionary<ulong, Disasm> instructions, HashSet<ulong> remainingAddresses, HashSet<BasicBlock> basicBlocks)
+        public void FindInstructions(Dictionary<ulong, Disasm> instructions, HashSet<ulong> remainingAddresses, Dictionary<ulong, BasicBlock> basicBlocks)
         {
             // Create a new set of instructions if needed.
             if (instructions == null)
@@ -668,7 +668,7 @@
 
             if (basicBlocks == null)
             {
-                basicBlocks = new HashSet<BasicBlock>();
+                basicBlocks = new Dictionary<ulong, BasicBlock>();
             }
 
             // Initialize the current virtual address.
@@ -690,6 +690,13 @@
             {
                 // Make sure the byte is marked as the start of an instruction.
                 this.byteTypes[baseCodeOffset] = ByteType.InstructionStart;
+
+                // Make sure that a basic block exists for this instruction.
+                if (!basicBlocks.ContainsKey(currentVirtualAddress))
+                {
+                    basicBlocks.Add(currentVirtualAddress, new BasicBlock(currentVirtualAddress));
+                }
+
                 return;
             }
 
@@ -756,10 +763,14 @@
             bool stopEvaluation = false;
 
             // Create a new basic block based on the current virtual address.
-            basicBlocks.Add(new BasicBlock(currentVirtualAddress));
+            if (!basicBlocks.ContainsKey(currentVirtualAddress))
+            {
+                basicBlocks.Add(currentVirtualAddress, new BasicBlock(currentVirtualAddress));
+            }
 
             foreach (Disasm i in BeaEngine.Disassemble(this.code, currentVirtualAddress, arch, this.GetCodeOffsetFromVirtualAddress(currentVirtualAddress)))
             {
+
                 // If this address has already been evaluated, then stop disassembling.
                 if (instructions.ContainsKey(i.VirtualAddr))
                 {
@@ -881,6 +892,23 @@
             }
         }
 
+        /// <summary>
+        /// Checks to see if a basic block at the provided address exists. If it does not exist, then a new basic
+        /// block is created.
+        /// </summary>
+        /// <param name="basicBlocks">a collection of pre-existing basic blocks</param>
+        /// <param name="address">the address of an existing or new basic block</param>
+        private void CreateNewBasicBlock(Dictionary<ulong, BasicBlock> basicBlocks, ulong address)
+        {
+            // See if the basic block already exists.
+            if (!basicBlocks.ContainsKey(address))
+            {
+                // If does not exist, create a new basic block and add it to the collection of basic blocks.
+                BasicBlock bb = new BasicBlock(address);
+                basicBlocks[address] = bb;
+            }
+        }
+
         private void MarkVirtualAddressAsExpectedInstruction(ulong virtualAddress)
         {
             ulong codeOffset = this.GetCodeOffsetFromVirtualAddress(virtualAddress);
@@ -900,7 +928,6 @@
             }
             else
             {
-                ByteType bt = this.byteTypes[codeOffset];
                 Console.WriteLine();
             }
         }
@@ -1581,23 +1608,6 @@
             }
 
             return codeChunks;
-        }
-
-        /// <summary>
-        /// Checks to see if a basic block at the provided address exists. If it does not exist, then a new basic
-        /// block is created.
-        /// </summary>
-        /// <param name="basicBlocks">a collection of pre-existing basic blocks</param>
-        /// <param name="address">the address of an existing or new basic block</param>
-        private void CreateNewBasicBlock(Dictionary<ulong, BasicBlock> basicBlocks, ulong address)
-        {
-            // See if the basic block already exists.
-            if (!basicBlocks.ContainsKey(address))
-            {
-                // If does not exist, create a new basic block and add it to the collection of basic blocks.
-                BasicBlock bb = new BasicBlock(address);
-                basicBlocks[address] = bb;
-            }
         }
 
         /// <summary>

@@ -23,7 +23,7 @@
             PEFile pef = new PEFile(filename);
             Dictionary<ulong, BeaEngineCS.BeaEngine._Disasm> instructions = new Dictionary<ulong, BeaEngineCS.BeaEngine._Disasm>();
             HashSet<ulong> remainingAddresses = new HashSet<ulong>();
-            HashSet<BasicBlock> basicBlocks = new HashSet<BasicBlock>();
+            Dictionary<ulong, BasicBlock> basicBlocks = new Dictionary<ulong, BasicBlock>();
 
             while (!pef.AllBytesHaveBeenProcessed)
             {
