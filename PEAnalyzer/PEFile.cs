@@ -135,6 +135,8 @@
         {
             // Initialize properties.
             this.BasicBlocks = new Dictionary<ulong, BasicBlock>();
+            this.Instructions = new Dictionary<ulong, Disasm>();
+            this.Functions = new Dictionary<ulong, Function>();
 
             // Read in the PE File.
             using (FileStream fs = new FileStream(filePath, FileMode.Open, FileAccess.Read))
@@ -576,7 +578,11 @@
         /// </summary>
         public Dictionary<ulong, BasicBlock> BasicBlocks { get; private set; }
 
-        public bool AllBytesHaveBeenProcessed
+        public Dictionary<ulong, Disasm> Instructions { get; private set; }
+
+        public Dictionary<ulong, Function> Functions { get; private set; }
+
+        private bool AllBytesHaveBeenProcessed
         {
             get
             {
@@ -584,7 +590,7 @@
             }
         }
 
-        public ulong? FirstUnprocessedVirtualAddress
+        private ulong? FirstUnprocessedVirtualAddress
         {
             get
             {
@@ -653,7 +659,176 @@
 
         #region Methods
 
-        public void FindInstructions(Dictionary<ulong, Disasm> instructions, HashSet<ulong> remainingAddresses, Dictionary<ulong, BasicBlock> basicBlocks)
+        public void IdentifyFunctions()
+        {
+            Dictionary<ulong, Function> functions = new Dictionary<ulong, Function>();
+
+            // Get a collection of basic blocks that have no previous basic blocks.
+            Dictionary<ulong, BasicBlock> startingBlocks = new Dictionary<ulong, BasicBlock>();
+            foreach (BasicBlock bb in this.BasicBlocks.Values)
+            {
+                if (bb.PreviousBasicBlocks.Count == 0)
+                {
+                    startingBlocks[bb.FirstInstructionAddress] = bb;
+                }
+            }
+
+            foreach (BasicBlock bb in startingBlocks.Values)
+            {
+                Dictionary<ulong, BasicBlock> connectedBlocks = PEFile.FindAllConnectedBasicBlocks(bb);
+                Function f = new Function(bb.FirstInstructionAddress);
+                foreach (BasicBlock connectedBlock in connectedBlocks.Values)
+                {
+                    f.BasicBlocks.Add(connectedBlock.FirstInstructionAddress, connectedBlock);
+                }
+
+                functions.Add(f.FirstInstructionAddress, f);
+            }
+
+            this.Functions = functions;
+        }
+
+        public void FindInstructionsAndBasicBlocks()
+        {
+            Dictionary<ulong, BeaEngineCS.BeaEngine._Disasm> instructions = new Dictionary<ulong, BeaEngineCS.BeaEngine._Disasm>();
+            HashSet<ulong> remainingAddresses = new HashSet<ulong>();
+            Dictionary<ulong, BasicBlock> basicBlocks = new Dictionary<ulong, BasicBlock>();
+
+            // Recursively scan this file for instructions and basic blocks.
+            while (!this.AllBytesHaveBeenProcessed)
+            {
+                remainingAddresses.Add((ulong)this.FirstUnprocessedVirtualAddress);
+
+                while (remainingAddresses.Count > 0)
+                {
+                    this.FindInstructions(instructions, remainingAddresses, basicBlocks);
+                }
+            }
+
+            // Set the instructions for this PE file.
+            this.Instructions = instructions;
+
+            // Fill in the basic blocks with instructions.
+            BasicBlock currentBasicBlock = null;
+            foreach (Disasm i in this.Instructions.Values.OrderBy(x => x.VirtualAddr))
+            {
+                // See if a basic block starts at this instruction's address.
+                if (basicBlocks.ContainsKey(i.VirtualAddr))
+                {
+                    // If so, move to that basic block.
+                    currentBasicBlock = basicBlocks[i.VirtualAddr];
+                }
+
+                // Add the current instruction to the current basic block.
+                currentBasicBlock.Instructions.Add(i);
+            }
+
+            // Check for empty basic blocks.
+            if (basicBlocks.Values.Where(x => x.Instructions.Count == 0).Count() > 0)
+            {
+                throw new Exception("Some basic blocks have no instructions.");
+            }
+
+            // Remove the last basic block if it contains only nulls until the end of the code section.
+            ulong lastBasicBlockAddress = basicBlocks.Last().Value.FirstInstructionAddress;
+            ulong lastBasicBlockCodeOffset = this.GetCodeOffsetFromVirtualAddress(lastBasicBlockAddress);
+            bool containsAllZeros = true;
+            for (ulong i = lastBasicBlockCodeOffset; i < (ulong)this.code.Length; ++i)
+            {
+                containsAllZeros &= this.code[i] == 0x00;
+            }
+            if (containsAllZeros)
+            {
+                basicBlocks.Remove(basicBlocks.Last().Key);
+            }
+
+            // Link the basic blocks together.
+            BasicBlock lastBasicBlock = basicBlocks.Last().Value;
+            ulong lastValidInstructionAddress = basicBlocks.Last().Value.Instructions.Last().VirtualAddr;
+            foreach (BasicBlock bb in basicBlocks.Values)
+            {
+                Disasm lastInstruction = bb.Instructions.Last();
+                ulong branchTarget = lastInstruction.Instruction.AddrValue;
+                ulong fallThroughAddress = lastInstruction.VirtualAddr + (ulong)lastInstruction.Length;
+
+                switch (lastInstruction.Instruction.BranchType)
+                {
+                    case BeaEngine.BranchType.None:
+                    case BeaEngine.BranchType.CallType:
+                        this.ConnectFallThroughBasicBlock(fallThroughAddress, bb, basicBlocks);
+                        break;
+
+                    case BeaEngine.BranchType.RetType:
+                        break;
+
+                    case BeaEngine.BranchType.JmpType:
+                    default:
+                        if (branchTarget == 0)
+                        {
+                            // Look for a jump table.
+                            ulong jumpTableAddress = (ulong)lastInstruction.Argument1.Memory.Displacement;
+                            HashSet<ulong> jumpTableEntries = this.GetJumpTableAddresses(jumpTableAddress);
+
+                            // Link to each target basic block.
+                            foreach (ulong address in jumpTableEntries)
+                            {
+                                if (!basicBlocks.ContainsKey(address))
+                                {
+                                    throw new Exception("No basic block exists for this jump table entry.");
+                                }
+
+                                // Link to the jump target block.
+                                BasicBlock jumpTargetBlock = basicBlocks[address];
+                                bb.NextBasicBlocks.Add(jumpTargetBlock);
+                                jumpTargetBlock.PreviousBasicBlocks.Add(bb);
+                            }
+
+                            break;
+                        }
+
+                        // Link the branch target to this basic block.
+                        if (!basicBlocks.ContainsKey(branchTarget))
+                        {
+                            throw new Exception("A basic block for the branch target is missing.");
+                        }
+                        else
+                        {
+                            // Create forward and backward links.
+                            BasicBlock branchTargetBlock = basicBlocks[branchTarget];
+                            bb.NextBasicBlocks.Add(branchTargetBlock);
+                            branchTargetBlock.PreviousBasicBlocks.Add(bb);
+                        }
+
+                        // Mark the next basic block as a fall-through block if this is a conditional branch.
+                        if (lastInstruction.Instruction.BranchType != BeaEngine.BranchType.JmpType)
+                        {
+                            this.ConnectFallThroughBasicBlock(fallThroughAddress, bb, basicBlocks);
+                        }
+
+                        break;
+                }
+            }
+
+            // Set this PE file's collection of basic blocks.
+            this.BasicBlocks = basicBlocks;
+        }
+
+        private void ConnectFallThroughBasicBlock(ulong fallThroughAddress, BasicBlock currentBlock, Dictionary<ulong, BasicBlock> basicBlocks)
+        {
+            Disasm lastInstruction = currentBlock.Instructions.Last();
+            fallThroughAddress = lastInstruction.VirtualAddr + (ulong)lastInstruction.Length;
+
+            if (!basicBlocks.ContainsKey(fallThroughAddress))
+            {
+                throw new Exception("A basic block for the fall through instruction is missing.");
+            }
+
+            BasicBlock fallThroughBlock = basicBlocks[fallThroughAddress];
+            currentBlock.NextBasicBlocks.Add(fallThroughBlock);
+            fallThroughBlock.PreviousBasicBlocks.Add(currentBlock);
+        }
+
+        private void FindInstructions(Dictionary<ulong, Disasm> instructions, HashSet<ulong> remainingAddresses, Dictionary<ulong, BasicBlock> basicBlocks)
         {
             // Create a new set of instructions if needed.
             if (instructions == null)
@@ -770,7 +945,6 @@
 
             foreach (Disasm i in BeaEngine.Disassemble(this.code, currentVirtualAddress, arch, this.GetCodeOffsetFromVirtualAddress(currentVirtualAddress)))
             {
-
                 // If this address has already been evaluated, then stop disassembling.
                 if (instructions.ContainsKey(i.VirtualAddr))
                 {
@@ -809,8 +983,7 @@
                         {
                             if (i.Argument1.Memory.Displacement != 0)
                             {
-                                ulong jumpTableAddress =
-                                    (ulong)(i.Argument1.Memory.Displacement);
+                                ulong jumpTableAddress = (ulong)i.Argument1.Memory.Displacement;
                                 HashSet<ulong> jumpTableAddresses = this.GetJumpTableAddresses(jumpTableAddress);
                                 foreach (ulong address in jumpTableAddresses)
                                 {
@@ -819,18 +992,6 @@
                                     // Mark the jump target as an expected instruction.
                                     this.MarkVirtualAddressAsExpectedInstruction(address);
                                 }
-                            }
-                            else if (i.Argument2.Memory.Displacement != 0)
-                            {
-                                Console.WriteLine(((ulong)i.Argument2.Memory.Displacement).ToAddressString64());
-                            }
-                            else if (i.Argument3.Memory.Displacement != 0)
-                            {
-                                Console.WriteLine(((ulong)i.Argument3.Memory.Displacement).ToAddressString64());
-                            }
-                            else
-                            {
-
                             }
                         }
 
@@ -848,13 +1009,18 @@
 
                         break;
                     default:
-                        // Add the conditional branch target to the set of addresses to disassemble.
+                        // Add the conditional branch target and fall through instruction to the set of addresses to
+                        // disassemble.
                         if (i.Instruction.AddrValue != 0)
                         {
-                            remainingAddresses.Add(i.Instruction.AddrValue);
+                            ulong fallThroughInstructionAddress = i.VirtualAddr + (ulong)i.Length;
 
-                            // Mark the branch target as an expected instruction.
+                            remainingAddresses.Add(i.Instruction.AddrValue);
+                            remainingAddresses.Add(fallThroughInstructionAddress);
+
+                            // Mark the branch target and fall through instruction as expected instructions.
                             this.MarkVirtualAddressAsExpectedInstruction(i.Instruction.AddrValue);
+                            this.MarkVirtualAddressAsExpectedInstruction(fallThroughInstructionAddress);
                         }
 
                         break;
@@ -892,26 +1058,53 @@
             }
         }
 
-        /// <summary>
-        /// Checks to see if a basic block at the provided address exists. If it does not exist, then a new basic
-        /// block is created.
-        /// </summary>
-        /// <param name="basicBlocks">a collection of pre-existing basic blocks</param>
-        /// <param name="address">the address of an existing or new basic block</param>
-        private void CreateNewBasicBlock(Dictionary<ulong, BasicBlock> basicBlocks, ulong address)
+        private static Dictionary<ulong, BasicBlock> FindAllConnectedBasicBlocks(BasicBlock bb)
         {
-            // See if the basic block already exists.
-            if (!basicBlocks.ContainsKey(address))
+            // Look for connected blocks.
+            Dictionary<ulong, BasicBlock> connectedBlocks = new Dictionary<ulong, BasicBlock>();
+            Dictionary<ulong, BasicBlock> addedBlocks = new Dictionary<ulong, BasicBlock>();
+            addedBlocks.Add(bb.FirstInstructionAddress, bb);
+            while (addedBlocks.Count > 0)
             {
-                // If does not exist, create a new basic block and add it to the collection of basic blocks.
-                BasicBlock bb = new BasicBlock(address);
-                basicBlocks[address] = bb;
+                // Add the newly discovered connected basic blocks.
+                foreach (BasicBlock addedBlock in addedBlocks.Values)
+                {
+                    connectedBlocks.Add(addedBlock.FirstInstructionAddress, addedBlock);
+                }
+
+                // Clear the set of newly discovered connected basic blocks.
+                addedBlocks = new Dictionary<ulong, BasicBlock>();
+
+                // Iterate over the current set of connected blocks, looking for more connected blocks.
+                foreach (BasicBlock connectedBlock in connectedBlocks.Values)
+                {
+                    foreach (BasicBlock nextBlock in connectedBlock.NextBasicBlocks)
+                    {
+                        if (!connectedBlocks.ContainsKey(nextBlock.FirstInstructionAddress) &&
+                            !addedBlocks.ContainsKey(nextBlock.FirstInstructionAddress))
+                        {
+                            addedBlocks.Add(nextBlock.FirstInstructionAddress, nextBlock);
+                        }
+                    }
+
+                    foreach (BasicBlock previousBlock in connectedBlock.PreviousBasicBlocks)
+                    {
+                        if (!connectedBlocks.ContainsKey(previousBlock.FirstInstructionAddress) &&
+                            !addedBlocks.ContainsKey(previousBlock.FirstInstructionAddress))
+                        {
+                            addedBlocks.Add(previousBlock.FirstInstructionAddress, previousBlock);
+                        }
+                    }
+                }
             }
+
+            return connectedBlocks;
         }
 
         private void MarkVirtualAddressAsExpectedInstruction(ulong virtualAddress)
         {
             ulong codeOffset = this.GetCodeOffsetFromVirtualAddress(virtualAddress);
+            ByteType bt = this.byteTypes[codeOffset];
             if (this.byteTypes[codeOffset] == ByteType.Unprocessed)
             {
                 this.byteTypes[codeOffset] = ByteType.ExpectedInstructionStart;
@@ -1420,49 +1613,6 @@
             }
 
             return functions;
-        }
-
-        private static HashSet<BasicBlock> FindAllConnectedBasicBlocks(BasicBlock bb)
-        {
-            // Look for connected blocks.
-            HashSet<BasicBlock> connectedBlocks = new HashSet<BasicBlock>();
-            HashSet<BasicBlock> addedBlocks = new HashSet<BasicBlock>();
-            addedBlocks.Add(bb);
-            while (addedBlocks.Count > 0)
-            {
-                // Add the newly discovered connected basic blocks.
-                connectedBlocks.UnionWith(addedBlocks);
-
-                // Clear the set of newly discovered connected basic blocks.
-                addedBlocks = new HashSet<BasicBlock>();
-
-                // Iterate over the current set of connected blocks, looking for more connected blocks.
-                foreach (BasicBlock connectedBlock in connectedBlocks)
-                {
-                    foreach (BasicBlock nextBlock in connectedBlock.NextBasicBlocks)
-                    {
-                        if (!connectedBlocks.Contains(nextBlock))
-                        {
-                            addedBlocks.Add(nextBlock);
-                        }
-                    }
-
-                    foreach (BasicBlock previousBlock in connectedBlock.PreviousBasicBlocks)
-                    {
-                        if (previousBlock.FirstInstructionAddress == 0x00000000004c1800)
-                        {
-                            Console.WriteLine();
-                        }
-
-                        if (!connectedBlocks.Contains(previousBlock))
-                        {
-                            addedBlocks.Add(previousBlock);
-                        }
-                    }
-                }
-            }
-
-            return connectedBlocks;
         }
         */
         /// <summary>

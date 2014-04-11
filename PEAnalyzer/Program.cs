@@ -21,19 +21,8 @@
             string filename = @"D:\inbox\notepad++.exe";
             //string filename = @"D:\inbox\MRT.exe";
             PEFile pef = new PEFile(filename);
-            Dictionary<ulong, BeaEngineCS.BeaEngine._Disasm> instructions = new Dictionary<ulong, BeaEngineCS.BeaEngine._Disasm>();
-            HashSet<ulong> remainingAddresses = new HashSet<ulong>();
-            Dictionary<ulong, BasicBlock> basicBlocks = new Dictionary<ulong, BasicBlock>();
-
-            while (!pef.AllBytesHaveBeenProcessed)
-            {
-                remainingAddresses.Add((ulong)pef.FirstUnprocessedVirtualAddress);
-
-                while (remainingAddresses.Count > 0)
-                {
-                    pef.FindInstructions(instructions, remainingAddresses, basicBlocks);
-                }
-            }
+            pef.FindInstructionsAndBasicBlocks();
+            pef.IdentifyFunctions();
 
             Console.ReadKey(true);
         }

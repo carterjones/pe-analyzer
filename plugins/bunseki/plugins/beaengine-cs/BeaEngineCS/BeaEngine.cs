@@ -126,6 +126,7 @@
 
         public enum BranchType : int
         {
+            None = 0,
             JO = 1,
             JC,
             JE,
