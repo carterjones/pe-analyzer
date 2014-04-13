@@ -693,11 +693,22 @@
             Dictionary<ulong, BeaEngineCS.BeaEngine._Disasm> instructions = new Dictionary<ulong, BeaEngineCS.BeaEngine._Disasm>();
             HashSet<ulong> remainingAddresses = new HashSet<ulong>();
             Dictionary<ulong, BasicBlock> basicBlocks = new Dictionary<ulong, BasicBlock>();
+            bool isFirstPass = true;
 
             // Recursively scan this file for instructions and basic blocks.
             while (!this.AllBytesHaveBeenProcessed)
             {
-                remainingAddresses.Add((ulong)this.FirstUnprocessedVirtualAddress);
+                if (isFirstPass)
+                {
+                    isFirstPass = false;
+                    ulong entryPoint = this.ImageBase + (this.is32BitHeader ?
+                        this.OptionalHeader32.AddressOfEntryPoint : this.OptionalHeader64.AddressOfEntryPoint);
+                    remainingAddresses.Add(entryPoint);
+                }
+                else
+                {
+                    remainingAddresses.Add((ulong)this.FirstUnprocessedVirtualAddress);
+                }
 
                 while (remainingAddresses.Count > 0)
                 {
