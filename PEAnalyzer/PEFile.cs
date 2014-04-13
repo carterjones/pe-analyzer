@@ -1,32 +1,5 @@
 ﻿namespace PEAnalyzer
 {
-    // possible new approach #1:
-    //
-    // go to start of code segment
-    // pos_refs  = look for reference arrays
-    // pos_align = look for byte alignment sequences that are tangent to alignment boundaries
-    // for all alignment sequences:
-    //   dis_insts = disassemble instructions until next pos_ref or pos_align
-    //   for each dis_inst in dis_insts:
-    //     if dis_inst.last_inst crosses the beginning of another first inst or touches it perfectly:
-    //       combine instruction lists
-    /*
-     * Possible new approach #2:
-     * pos = start of code segment
-     * bb = null
-     * while pos != end of code segment:
-     *   inst = disassemble one instruction
-     *   if bb == null:
-     *     bb = new basic block starting at inst
-     *   bb.add(inst)
-     *   if inst.flowtype = unconditional branch:
-     *     if inst.branchtarget = 
-     */
-    /*
-     * Possible new approach #3:
-     * http://reverseengineering.stackexchange.com/questions/2347/what-is-the-algorithm-used-in-recursive-traversal-disassembly
-     */
-
     using System;
     using System.Collections.Generic;
     using System.Diagnostics.CodeAnalysis;
@@ -739,6 +712,11 @@
             {
                 throw new Exception("Some basic blocks have no instructions.");
             }
+
+            // TODO: search through all basic blocks, looking for blocks with only a single nop (single or multi-byte)
+            // instruction. if one is found, see if the next basic block occurs at the address following the nop. if this
+            // occurs, merge the following block inton the nop block and remove the following block from the collection of
+            // basic blocks.
 
             // Remove the last basic block if it contains only nulls until the end of the code section.
             ulong lastBasicBlockAddress = basicBlocks.Last().Value.FirstInstructionAddress;
