@@ -1146,6 +1146,11 @@
         /// </remarks>
         private bool IsNopInstruction(Disasm instruction)
         {
+            if (instruction.Instruction.Opcode == 0x90)
+            {
+                return true;
+            }
+
             // Check for: mov XYZ, XYZ
             if (instruction.Instruction.InstructionType == BeaEngine.InstructionType.DATA_TRANSFER &&
                 instruction.Argument1.AccessMode == BeaEngine.AccessMode.WRITE &&
