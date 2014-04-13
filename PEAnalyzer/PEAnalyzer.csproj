@@ -46,15 +46,17 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="BasicBlock.cs" />
     <Compile Include="Extensions.cs" />
+    <Compile Include="Function.cs" />
     <Compile Include="PEFile.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\plugins\bunseki\Bunseki\Bunseki.csproj">
-      <Project>{AF903833-3F53-42BC-ADA1-797D9709EA3C}</Project>
-      <Name>Bunseki</Name>
+    <ProjectReference Include="..\plugins\bunseki\plugins\beaengine-cs\BeaEngineCS\BeaEngineCS.csproj">
+      <Project>{C8241D75-0AA1-419D-A423-175FB36E4E34}</Project>
+      <Name>BeaEngineCS</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

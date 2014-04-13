@@ -71,6 +71,7 @@
   <ItemGroup>
     <Compile Include="BasicBlock.cs" />
     <Compile Include="Disassembler.cs" />
+    <Compile Include="Function.cs" />
     <Compile Include="Instruction.cs" />
     <Compile Include="InstructionArgument.cs" />
   </ItemGroup>

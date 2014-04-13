@@ -6,7 +6,6 @@
     using System.Linq;
     using System.Runtime.InteropServices;
     using System.Text;
-    using Bunseki;
 
     /// <summary>
     /// The main class to be run when the executable is run.
@@ -20,8 +19,10 @@
         public static void Main(string[] args)
         {
             string filename = @"D:\inbox\notepad++.exe";
+            //string filename = @"D:\inbox\MRT.exe";
             PEFile pef = new PEFile(filename);
-            pef.FindBasicBlocks();
+            pef.FindInstructionsAndBasicBlocks();
+            pef.IdentifyFunctions();
 
             Console.ReadKey(true);
         }

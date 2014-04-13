@@ -124,8 +124,9 @@
             PR_ = 0x20
         }
 
-        public enum BranchType
+        public enum BranchType : int
         {
+            None = 0,
             JO = 1,
             JC,
             JE,
@@ -195,6 +196,10 @@
 
         public enum AccessMode
         {
+            /// <remarks>
+            /// "None" is not part of the original BeaEngine specification.
+            /// </remarks>
+            None = 0x0,
             READ = 0x1,
             WRITE = 0x2,
         }
@@ -253,28 +258,28 @@
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, EntryPoint = "Disasm")]
         public static extern int Disassemble(ref _Disasm instruction);
 
-        public static IEnumerable<_Disasm> Disassemble(byte[] data, long address, Architecture architecture)
+        public static IEnumerable<_Disasm> Disassemble(byte[] data, long address, Architecture architecture, ulong dataOffset = 0)
         {
-            return BeaEngine.Disassemble(data, new UIntPtr((ulong)address), architecture);
+            return BeaEngine.Disassemble(data, new UIntPtr((ulong)address), architecture, dataOffset);
         }
 
-        public static IEnumerable<_Disasm> Disassemble(byte[] data, ulong address, Architecture architecture)
+        public static IEnumerable<_Disasm> Disassemble(byte[] data, ulong address, Architecture architecture, ulong dataOffset = 0)
         {
-            return BeaEngine.Disassemble(data, new UIntPtr(address), architecture);
+            return BeaEngine.Disassemble(data, new UIntPtr(address), architecture, dataOffset);
         }
 
-        public static IEnumerable<_Disasm> Disassemble(byte[] data, IntPtr address, Architecture architecture)
+        public static IEnumerable<_Disasm> Disassemble(byte[] data, IntPtr address, Architecture architecture, ulong dataOffset = 0)
         {
-            return BeaEngine.Disassemble(data, new UIntPtr((ulong)address.ToInt64()), architecture);
+            return BeaEngine.Disassemble(data, new UIntPtr((ulong)address.ToInt64()), architecture, dataOffset);
         }
 
-        public static IEnumerable<_Disasm> Disassemble(byte[] data, UIntPtr address, Architecture architecture)
+        public static IEnumerable<_Disasm> Disassemble(byte[] data, UIntPtr address, Architecture architecture, ulong dataOffset = 0)
         {
             GCHandle h = GCHandle.Alloc(data, GCHandleType.Pinned);
             UInt64 EndCodeSection = (UInt64)h.AddrOfPinnedObject().ToInt64() + (ulong)data.Length;
 
             _Disasm d = new _Disasm();
-            d.InstructionPointer = (UIntPtr)h.AddrOfPinnedObject().ToInt64();
+            d.InstructionPointer = (UIntPtr)((ulong)h.AddrOfPinnedObject().ToInt64() + dataOffset);
             d.VirtualAddr = address.ToUInt64();
             d.Architecture = architecture;
             bool error = false;
@@ -341,6 +346,16 @@
             /// A place to optionally store the length of an instruction.
             /// </summary>
             public int Length { get; set; }
+
+            public void SetVirtualAddr(ulong virtualAddress)
+            {
+                this.VirtualAddr = virtualAddress;
+            }
+
+            public override string ToString()
+            {
+                return "0x" + new IntPtr((long)this.VirtualAddr).ToString("x").PadLeft(16, '0') + ": " + this.CompleteInstr;
+            }
         }
 
         [StructLayout(LayoutKind.Sequential, Pack = 1)]
@@ -350,7 +365,7 @@
             public Int32 Opcode;
             [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 16)]
             public string Mnemonic;
-            public Int32 BranchType;
+            public BranchType BranchType;
             public EFLStruct Flags;
             public UInt64 AddrValue;
             public Int64 Immediat;
