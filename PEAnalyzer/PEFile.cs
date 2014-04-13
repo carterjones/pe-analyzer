@@ -713,10 +713,29 @@
                 throw new Exception("Some basic blocks have no instructions.");
             }
 
-            // TODO: search through all basic blocks, looking for blocks with only a single nop (single or multi-byte)
-            // instruction. if one is found, see if the next basic block occurs at the address following the nop. if this
-            // occurs, merge the following block inton the nop block and remove the following block from the collection of
-            // basic blocks.
+            // Look for basic blocks with a single nop instruction. If the basic block does not have a block
+            // immediately following it, then remove the basic block with the nop instruction.
+            ulong fallThroughAddress = ulong.MaxValue;
+            foreach (BasicBlock bb in basicBlocks.Values.ToList())
+            {
+                // Find all basic blocks with a single instruction.
+                if (bb.Instructions.Count == 1)
+                {
+                    // Narrow that down to only basic blocks with a single nop instruction.
+                    Disasm instruction = bb.Instructions.First();
+                    if (this.IsNopInstruction(instruction))
+                    {
+                        // Check to see if a fall-through instruction exists after this nop instruction.
+                        fallThroughAddress = instruction.VirtualAddr + (ulong)instruction.Length;
+                        if (!basicBlocks.ContainsKey(fallThroughAddress))
+                        {
+                            // If no fall-through instruction exists, remove this basic block and the nop instruction.
+                            basicBlocks.Remove(instruction.VirtualAddr);
+                            this.Instructions.Remove(instruction.VirtualAddr);
+                        }
+                    }
+                }
+            }
 
             // Remove the last basic block if it contains only nulls until the end of the code section.
             ulong lastBasicBlockAddress = basicBlocks.Last().Value.FirstInstructionAddress;
@@ -738,7 +757,7 @@
             {
                 Disasm lastInstruction = bb.Instructions.Last();
                 ulong branchTarget = lastInstruction.Instruction.AddrValue;
-                ulong fallThroughAddress = lastInstruction.VirtualAddr + (ulong)lastInstruction.Length;
+                fallThroughAddress = lastInstruction.VirtualAddr + (ulong)lastInstruction.Length;
 
                 switch (lastInstruction.Instruction.BranchType)
                 {
