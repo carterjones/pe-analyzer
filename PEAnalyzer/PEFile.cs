@@ -927,10 +927,7 @@
             bool stopEvaluation = false;
 
             // Create a new basic block based on the current virtual address.
-            if (!basicBlocks.ContainsKey(currentVirtualAddress))
-            {
-                basicBlocks.Add(currentVirtualAddress, new BasicBlock(currentVirtualAddress));
-            }
+            PEFile.AddBasicBlock(currentVirtualAddress, basicBlocks);
 
             foreach (Disasm i in BeaEngine.Disassemble(this.code, currentVirtualAddress, arch, this.GetCodeOffsetFromVirtualAddress(currentVirtualAddress)))
             {
@@ -1044,6 +1041,14 @@
                 {
                     break;
                 }
+            }
+        }
+
+        private static void AddBasicBlock(ulong virtualAddress, Dictionary<ulong, BasicBlock> basicBlocks)
+        {
+            if (!basicBlocks.ContainsKey(virtualAddress))
+            {
+                basicBlocks.Add(virtualAddress, new BasicBlock(virtualAddress));
             }
         }
 
