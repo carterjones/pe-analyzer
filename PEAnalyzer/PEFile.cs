@@ -887,6 +887,14 @@
                     this.byteTypes[baseCodeOffset + i] = ByteType.MultiByteNopPart;
                 }
 
+                // Add the nop instruction to the list of instructions.
+                Disasm nopInstruction = this.DisassembleInstruction(currentVirtualAddress);
+                instructions.Add(nopInstruction.VirtualAddr, nopInstruction);
+
+                // Create a basic block for the nop instruction.
+                PEFile.AddBasicBlock(nopInstruction.VirtualAddr, basicBlocks);
+
+                // Stop disassembling.
                 return;
             }
 
