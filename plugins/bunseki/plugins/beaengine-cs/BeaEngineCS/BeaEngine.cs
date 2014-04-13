@@ -196,6 +196,10 @@
 
         public enum AccessMode
         {
+            /// <remarks>
+            /// "None" is not part of the original BeaEngine specification.
+            /// </remarks>
+            None = 0x0,
             READ = 0x1,
             WRITE = 0x2,
         }

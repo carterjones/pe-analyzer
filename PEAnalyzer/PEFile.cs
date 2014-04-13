@@ -1125,26 +1125,44 @@
             }
         }
 
+        /// <remarks>
+        /// Documented nop instructions:
+        /// nop               // nop
+        /// xchg eax, eax     // http://stackoverflow.com/a/2703440/770370 // interpreted as 'nop' in BeaEngine
+        /// mov eax, eax      // http://stackoverflow.com/a/2703440/770370
+        /// lea eax, [eax+00] // http://stackoverflow.com/a/2703440/770370
+        /// lea ebx, [ebx+00] // http://www.strchr.com/machine_code_redundancy
+        /// lea esp, [esp+00] // http://www.strchr.com/machine_code_redundancy
+        /// </remarks>
         private ulong? GetNumNopBytesAtCodeOffset(ulong codeOffset)
         {
-            // Check for: mov edi, edi
-            if (codeOffset < (ulong)this.code.Length + 1)
+            // Calculate the virtual address.
+            ulong virtualAddress = this.GetVirtualAddressFromCodeOffset(codeOffset);
+
+            // Disassemble the instruction at this address.
+            BeaEngine.Architecture arch
+                = this.is32BitHeader ? BeaEngine.Architecture.x86_32 : BeaEngine.Architecture.x86_64;
+            Disasm instruction = BeaEngine.Disassemble(this.code, virtualAddress, arch, codeOffset).First();
+
+            // Check for: mov XYZ, XYZ
+            if (instruction.Instruction.InstructionType == BeaEngine.InstructionType.DATA_TRANSFER &&
+                instruction.Argument1.AccessMode == BeaEngine.AccessMode.WRITE &&
+                instruction.Argument2.AccessMode == BeaEngine.AccessMode.READ &&
+                instruction.Argument1.Details == (BeaEngine.ArgumentDetails.REGISTER_TYPE | BeaEngine.ArgumentDetails.GENERAL_REG) &&
+                instruction.Argument2.Details == (BeaEngine.ArgumentDetails.REGISTER_TYPE | BeaEngine.ArgumentDetails.GENERAL_REG) &&
+                instruction.Argument1.ArgMnemonic.Equals(instruction.Argument2.ArgMnemonic))
             {
-                if (this.code[codeOffset] == 0x8B && this.code[codeOffset + 1] == 0xFF)
-                {
-                    return 2;
-                }
+                return (ulong)instruction.Length;
             }
 
-            // Check for: lea eax, [eax]
-            if (codeOffset < (ulong)this.code.Length + 2)
+            // Check for: lea XYZ, [XYZ+00h]
+            if (instruction.Argument1.AccessMode == BeaEngine.AccessMode.WRITE &&
+                instruction.Argument2.AccessMode == BeaEngine.AccessMode.None &&
+                instruction.Argument1.RegisterId == (BeaEngine.RegisterId)instruction.Argument2.Memory.BaseRegister &&
+                instruction.Argument2.Memory.IndexRegister == 0 &&
+                instruction.Argument2.Memory.Displacement == 0)
             {
-                if (this.code[codeOffset] == 0x8D &&
-                    this.code[codeOffset + 1] == 0x49 &&
-                    this.code[codeOffset + 2] == 0x00)
-                {
-                    return 3;
-                }
+                return (ulong)instruction.Length;
             }
 
             return null;
