@@ -1136,6 +1136,32 @@
         /// lea ebx, [ebx+00] // http://www.strchr.com/machine_code_redundancy
         /// lea esp, [esp+00] // http://www.strchr.com/machine_code_redundancy
         /// </remarks>
+        private bool IsNopInstruction(Disasm instruction)
+        {
+            // Check for: mov XYZ, XYZ
+            if (instruction.Instruction.InstructionType == BeaEngine.InstructionType.DATA_TRANSFER &&
+                instruction.Argument1.AccessMode == BeaEngine.AccessMode.WRITE &&
+                instruction.Argument2.AccessMode == BeaEngine.AccessMode.READ &&
+                instruction.Argument1.Details == (BeaEngine.ArgumentDetails.REGISTER_TYPE | BeaEngine.ArgumentDetails.GENERAL_REG) &&
+                instruction.Argument2.Details == (BeaEngine.ArgumentDetails.REGISTER_TYPE | BeaEngine.ArgumentDetails.GENERAL_REG) &&
+                instruction.Argument1.ArgMnemonic.Equals(instruction.Argument2.ArgMnemonic))
+            {
+                return true;
+            }
+
+            // Check for: lea XYZ, [XYZ+00h]
+            if (instruction.Argument1.AccessMode == BeaEngine.AccessMode.WRITE &&
+                instruction.Argument2.AccessMode == BeaEngine.AccessMode.None &&
+                instruction.Argument1.RegisterId == (BeaEngine.RegisterId)instruction.Argument2.Memory.BaseRegister &&
+                instruction.Argument2.Memory.IndexRegister == 0 &&
+                instruction.Argument2.Memory.Displacement == 0)
+            {
+                return true;
+            }
+
+            return false;
+        }
+
         private ulong? GetNumNopBytesAtCodeOffset(ulong codeOffset)
         {
             // Calculate the virtual address.
@@ -1146,23 +1172,7 @@
                 = this.is32BitHeader ? BeaEngine.Architecture.x86_32 : BeaEngine.Architecture.x86_64;
             Disasm instruction = BeaEngine.Disassemble(this.code, virtualAddress, arch, codeOffset).First();
 
-            // Check for: mov XYZ, XYZ
-            if (instruction.Instruction.InstructionType == BeaEngine.InstructionType.DATA_TRANSFER &&
-                instruction.Argument1.AccessMode == BeaEngine.AccessMode.WRITE &&
-                instruction.Argument2.AccessMode == BeaEngine.AccessMode.READ &&
-                instruction.Argument1.Details == (BeaEngine.ArgumentDetails.REGISTER_TYPE | BeaEngine.ArgumentDetails.GENERAL_REG) &&
-                instruction.Argument2.Details == (BeaEngine.ArgumentDetails.REGISTER_TYPE | BeaEngine.ArgumentDetails.GENERAL_REG) &&
-                instruction.Argument1.ArgMnemonic.Equals(instruction.Argument2.ArgMnemonic))
-            {
-                return (ulong)instruction.Length;
-            }
-
-            // Check for: lea XYZ, [XYZ+00h]
-            if (instruction.Argument1.AccessMode == BeaEngine.AccessMode.WRITE &&
-                instruction.Argument2.AccessMode == BeaEngine.AccessMode.None &&
-                instruction.Argument1.RegisterId == (BeaEngine.RegisterId)instruction.Argument2.Memory.BaseRegister &&
-                instruction.Argument2.Memory.IndexRegister == 0 &&
-                instruction.Argument2.Memory.Displacement == 0)
+            if (this.IsNopInstruction(instruction))
             {
                 return (ulong)instruction.Length;
             }
