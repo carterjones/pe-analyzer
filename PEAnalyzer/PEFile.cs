@@ -1052,6 +1052,14 @@
             }
         }
 
+        private Disasm DisassembleInstruction(ulong virtualAddress)
+        {
+            ulong codeOffset = this.GetCodeOffsetFromVirtualAddress(virtualAddress);
+            BeaEngine.Architecture arch
+                = this.is32BitHeader ? BeaEngine.Architecture.x86_32 : BeaEngine.Architecture.x86_64;
+            return BeaEngine.Disassemble(this.code, virtualAddress, arch, codeOffset).First();
+        }
+
         private static Dictionary<ulong, BasicBlock> FindAllConnectedBasicBlocks(BasicBlock bb)
         {
             // Look for connected blocks.
